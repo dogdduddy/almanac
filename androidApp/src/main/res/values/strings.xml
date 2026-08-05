@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<resources>
+    <!--
+      표시 이름은 아직 미정이다. 확정되면 이 값만 바꾸면 된다.
+      코드 어디에서도 앱 이름을 하드코딩하지 말 것.
+    -->
+    <string name="app_name">Almanac</string>
+    <string name="widget_description">오늘의 하늘을 쓴 문장</string>
+
+    <!-- Glance 폰트 스파이크 전용. 결론이 나면 통째로 삭제한다. -->
+    <string name="spike_sample_text">Wuthering Heights, 1847</string>
+</resources>

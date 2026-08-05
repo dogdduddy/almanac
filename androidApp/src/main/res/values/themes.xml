@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<resources>
+    <style name="Theme.Almanac" parent="@android:style/Theme.Material.Light.NoActionBar" />
+
+    <!-- 스파이크 변형 T 전용: setTextViewTextAppearance 로 넘길 style. -->
+    <style name="TextAppearance.Almanac.Crimson" parent="@android:style/TextAppearance">
+        <item name="android:fontFamily">@font/crimson_text</item>
+        <item name="android:textSize">17sp</item>
+        <item name="android:textColor">#FF111111</item>
+    </style>
+</resources>
