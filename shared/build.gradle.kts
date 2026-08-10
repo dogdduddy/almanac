@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidKmpLibrary)
+    alias(libs.plugins.kotlinSerialization)
     alias(libs.plugins.sqldelight)
 }
 
@@ -53,21 +54,30 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.kotlinx.serialization.json)
             implementation(libs.sqldelight.runtime)
+            implementation(libs.ktor.client.core)
+            implementation(libs.ktor.client.content.negotiation)
+            implementation(libs.ktor.serialization.json)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
         }
         androidMain.dependencies {
             implementation(libs.sqldelight.android.driver)
+            implementation(libs.ktor.client.okhttp)
         }
         iosMain.dependencies {
             implementation(libs.sqldelight.native.driver)
+            implementation(libs.ktor.client.darwin)
         }
         // DB 를 붙인 테스트는 JVM 호스트에서만 돈다. 인메모리 JDBC 드라이버를 쓴다.
         // 순수 로직(PageSelector)의 크로스플랫폼 동일성은 commonTest 가 이미 양쪽에서 검증한다.
         getByName("androidHostTest").dependencies {
             implementation(libs.sqldelight.sqlite.driver)
+            // 실제 MET 응답 픽스처로 클라이언트를 검증한다 (네트워크 없이).
+            implementation(libs.ktor.client.mock)
+            implementation(libs.kotlinx.coroutines.test)
         }
     }
 }
