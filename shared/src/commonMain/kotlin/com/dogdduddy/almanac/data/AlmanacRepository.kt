@@ -134,15 +134,18 @@ class AlmanacRepository(
         val owned = ownedPackIds()
         if (owned.isEmpty()) return Bucket.ALL
 
-        val covered = contentQueries.bucketCoverage(language, owned).executeAsList()
-            .filter { it.entry_count > 0 }
-            .mapNotNull { row ->
-                val group = WeatherGroup.fromKey(row.weather_group) ?: return@mapNotNull null
-                val timeOfDay = TimeOfDay.fromKey(row.time_of_day) ?: return@mapNotNull null
-                Bucket(group, timeOfDay)
-            }
-            .toSet()
+        val covered = mutableSetOf<Bucket>()
+        for (row in contentQueries.coverageByGroupAndTime(language, owned).executeAsList()) {
+            if (row.entry_count <= 0) continue
+            val group = WeatherGroup.fromKey(row.weather_group) ?: continue
 
+            // time_of_day 가 NULL 인 행은 시간대 무관이므로 세 슬롯을 모두 덮는다.
+            val slots = row.time_of_day
+                ?.let { key -> TimeOfDay.fromKey(key)?.let(::listOf) ?: emptyList() }
+                ?: TimeOfDay.entries
+
+            slots.forEach { covered += Bucket(group, it) }
+        }
         return Bucket.ALL.filterNot { it in covered }
     }
 

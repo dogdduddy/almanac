@@ -57,16 +57,21 @@ class AlmanacRepositoryTest {
             var id = 1L
             for (bucket in Bucket.ALL) {
                 repeat(3) {
-                    insertEntry(id++, "base-2026", bucket)
+                    insertEntry(id++, "base-2026", listOf(bucket.weatherGroup), bucket.timeOfDay)
                 }
             }
-            // 테마 팩은 비 버킷에만 존재한다.
+            // 테마 팩은 비 그룹에만 존재한다.
             for (timeOfDay in TimeOfDay.entries) {
                 repeat(4) {
-                    insertEntry(id++, "sea-1851", Bucket(WeatherGroup.RAIN, timeOfDay))
+                    insertEntry(id++, "sea-1851", listOf(WeatherGroup.RAIN), timeOfDay)
                 }
             }
         }
+    }
+
+    /** 다중 버킷 + 시간대 무관을 쓰는 엔트리. id 는 기존 대역과 겹치지 않게 잡는다. */
+    private fun insertSpecial(id: Long, groups: List<WeatherGroup>, timeOfDay: TimeOfDay?) {
+        content.contentQueries.transaction { insertEntry(id, "base-2026", groups, timeOfDay) }
     }
 
     private fun insertPack(id: String, title: String, isBase: Boolean, order: Int) {
@@ -80,21 +85,35 @@ class AlmanacRepositoryTest {
         }
     }
 
-    private fun insertEntry(id: Long, packId: String, bucket: Bucket) {
+    private fun insertEntry(
+        id: Long,
+        packId: String,
+        groups: List<WeatherGroup>,
+        timeOfDay: TimeOfDay?,
+    ) {
         contentDriver.execute(
             null,
             """
             INSERT INTO entries (
-                id, pack_id, text, author, title, year, source_id, language,
-                weather_group, time_of_day, season_weight, temp_weight, word_count, license_note
-            ) VALUES (?, ?, ?, 'PLACEHOLDER', 'PLACEHOLDER', 1847, 'gutenberg-0', 'en',
-                      ?, ?, NULL, NULL, 50, 'public domain')
+                id, pack_id, text, author, title, section, year, source_id, language,
+                time_of_day, tier, season_weight, temp_weight, word_count, license_note
+            ) VALUES (?, ?, ?, 'PLACEHOLDER', 'PLACEHOLDER', NULL, 1847, 'gutenberg-0', 'en',
+                      ?, 'A', NULL, NULL, 50, 'public domain')
             """.trimIndent(),
-            5,
+            4,
         ) {
             bindLong(0, id); bindString(1, packId)
             bindString(2, "placeholder entry $id")
-            bindString(3, bucket.weatherGroup.key); bindString(4, bucket.timeOfDay.key)
+            bindString(3, timeOfDay?.key)
+        }
+        for (group in groups) {
+            contentDriver.execute(
+                null,
+                "INSERT INTO entry_weather_groups (entry_id, weather_group) VALUES (?, ?)",
+                2,
+            ) {
+                bindLong(0, id); bindString(1, group.key)
+            }
         }
     }
 
@@ -197,6 +216,68 @@ class AlmanacRepositoryTest {
         }
         assertTrue(drawnFromSea, "구매한 팩의 문장이 한 번도 안 뽑히면 팩 필터가 동작하지 않는 것")
     }
+
+    // ---- 수집 데이터의 실제 형태 ---------------------------------------------
+
+    /**
+     * 수집된 후보의 22% 는 여러 날씨 그룹에 속한다 (cloud|wind, cloud|snow, 최대 5개).
+     * 하나의 엔트리가 각 그룹의 후보에 모두 잡혀야 이 자산이 살아난다.
+     */
+    @Test
+    fun multiGroupEntryIsCandidateInEveryGroup() {
+        repo.ensureBaseEntitlement()
+        val id = 9001L
+        insertSpecial(id, listOf(WeatherGroup.CLOUDY, WeatherGroup.WIND, WeatherGroup.SNOW), TimeOfDay.MORNING)
+
+        for (group in listOf(WeatherGroup.CLOUDY, WeatherGroup.WIND, WeatherGroup.SNOW)) {
+            val ids = candidateIds(group, TimeOfDay.MORNING)
+            assertTrue(id in ids, "$group 후보에 다중 그룹 엔트리가 없다")
+        }
+        assertTrue(id !in candidateIds(WeatherGroup.RAIN, TimeOfDay.MORNING), "속하지 않은 그룹에 새면 안 된다")
+    }
+
+    /**
+     * 수집된 후보의 74% 는 시간 단서가 없다. NULL 은 "시간대 무관" 이며 세 슬롯 전부에 잡혀야 한다.
+     * 그렇지 않으면 그 74% 를 전부 수동 태깅해야만 쓸 수 있다.
+     */
+    @Test
+    fun nullTimeOfDayIsCandidateInEverySlot() {
+        repo.ensureBaseEntitlement()
+        val id = 9002L
+        insertSpecial(id, listOf(WeatherGroup.FOG), timeOfDay = null)
+
+        for (slot in TimeOfDay.entries) {
+            assertTrue(id in candidateIds(WeatherGroup.FOG, slot), "$slot 에 시간무관 엔트리가 없다")
+        }
+    }
+
+    /** 시간대가 명시된 엔트리는 그 슬롯에만 잡혀야 한다. */
+    @Test
+    fun explicitTimeOfDayIsScopedToItsSlot() {
+        repo.ensureBaseEntitlement()
+        val id = 9003L
+        insertSpecial(id, listOf(WeatherGroup.FOG), TimeOfDay.EVENING_NIGHT)
+
+        assertTrue(id in candidateIds(WeatherGroup.FOG, TimeOfDay.EVENING_NIGHT))
+        assertTrue(id !in candidateIds(WeatherGroup.FOG, TimeOfDay.MORNING))
+    }
+
+    /** 시간무관 엔트리 하나만으로도 그 그룹의 세 버킷이 전부 덮여야 한다. */
+    @Test
+    fun coverageCountsNullTimeAsAllSlots() {
+        repo.grantPack("sea-1851", PackSource.PURCHASE)
+        val before = repo.emptyBuckets("en").count { it.weatherGroup == WeatherGroup.FOG }
+        assertEquals(3, before)
+
+        insertSpecial(9004L, listOf(WeatherGroup.FOG), timeOfDay = null)
+        repo.grantPack("base-2026", PackSource.BUNDLED)
+        assertEquals(0, repo.emptyBuckets("en").count { it.weatherGroup == WeatherGroup.FOG })
+    }
+
+    private fun candidateIds(group: WeatherGroup, timeOfDay: TimeOfDay): List<Long> =
+        content.contentQueries
+            .candidateIdsForBucket("en", group.key, timeOfDay.key, repo.ownedPackIds())
+            .executeAsList()
 
     // ---- 히스토리 -----------------------------------------------------------
 

@@ -2,6 +2,11 @@
 --
 -- 여기에는 유저 데이터를 절대 넣지 않는다. 교체될 때 같이 날아간다.
 -- 반대로 교체가 전제이므로 이 스키마는 마이그레이션 없이 자유롭게 바꿔도 된다.
+--
+-- 언어는 en / ja 두 가지이고 **서로 번역 관계가 아니다.**
+-- 영어는 Gutenberg 의 영어 원작, 일본어는 아오조라 문고의 일본어 원작이다.
+-- (번역물은 별도 저작권이 있으므로 쓰지 않는다.)
+-- 따라서 language 는 행 단위 속성이고 번역 테이블은 필요 없다.
 
 -- 문장 묶음. 무료 스타터도, 유료 전체도, 나중의 작가 테마도 전부 팩이다.
 -- 판매 시스템은 아직 없지만 라벨은 큐레이션 시점에 붙는 게 압도적으로 싸므로 지금부터 둔다.
@@ -9,8 +14,8 @@ CREATE TABLE packs (
     id            TEXT    NOT NULL PRIMARY KEY,
     title         TEXT    NOT NULL,
     subtitle      TEXT,
-    -- 24버킷을 전부 덮는 베이스 팩인지. 유저는 항상 이런 팩을 최소 하나 보유해야 한다.
-    -- 테마 팩(예: 바다 문학)은 눈·안개 버킷이 비므로 단독 공급원이 될 수 없다.
+    -- 8개 날씨 그룹을 전부 덮는 베이스 팩인지. 유저는 항상 이런 팩을 최소 하나 보유해야 한다.
+    -- 테마 팩(예: 바다 문학)은 눈·안개가 비므로 단독 공급원이 될 수 없다.
     is_base       INTEGER NOT NULL DEFAULT 0,
     sort_order    INTEGER NOT NULL DEFAULT 0
 );
@@ -22,15 +27,23 @@ CREATE TABLE entries (
     text          TEXT    NOT NULL,
     author        TEXT    NOT NULL,
     title         TEXT    NOT NULL,
+    -- 장(chapter) 제목. 있으면 출처 표기를 정밀하게 할 수 있다. 없을 수 있다.
+    section       TEXT,
     -- 화면의 주인공은 "몇 년 전에 쓰였는가" 이므로 연도는 NOT NULL 이다.
     year          INTEGER NOT NULL,
     -- 구텐베르크 도서 번호 등. 저작권 소명용이라 필수.
     source_id     TEXT    NOT NULL,
     language      TEXT    NOT NULL,
 
-    -- 하드 키. 이 둘이 버킷을 이룬다.
-    weather_group TEXT    NOT NULL,
-    time_of_day   TEXT    NOT NULL,
+    -- **NULL 이면 시간대 무관** — 어느 시간대에도 후보로 잡힌다.
+    --
+    -- 수집된 후보의 74% 는 시간 단서가 없다. 24슬롯을 하드 파티션으로 강제하면
+    -- 그 전부를 수동 태깅해야 쓸 수 있는데 현실적이지 않다.
+    -- 시간이 뚜렷한 문장(황혼, 새벽 등)만 특화로 쓰고 나머지는 공용으로 둔다.
+    time_of_day   TEXT,
+
+    -- 큐레이션 품질 등급(A/B/C). 팩 배정과 가중치의 근거로 쓴다.
+    tier          TEXT,
 
     -- 하드 키가 아니라 가중치다. 커버리지 구멍을 막기 위해 필터가 아닌 선호로만 쓴다.
     -- 형식: "winter=1.5" 같은 콤마 구분 쌍. 비어 있으면 중립.
@@ -42,8 +55,19 @@ CREATE TABLE entries (
     license_note  TEXT    NOT NULL
 );
 
--- 후보 조회는 (언어 + 버킷 + 보유 팩) 으로만 일어난다.
-CREATE INDEX entries_lookup ON entries (language, weather_group, time_of_day, pack_id);
+-- **한 문장이 여러 날씨 그룹에 속할 수 있다.**
+--
+-- 수집 데이터의 22% 가 그렇다 (cloud|wind, cloud|snow, 최대 5개까지).
+-- 단일 컬럼으로 두면 이 정보가 버려지는데, 같은 큐레이션 노동으로 커버리지를
+-- 넓혀주는 자산이므로 조인 테이블로 살린다.
+CREATE TABLE entry_weather_groups (
+    entry_id      INTEGER NOT NULL REFERENCES entries(id),
+    weather_group TEXT    NOT NULL,
+    PRIMARY KEY (entry_id, weather_group)
+);
+
+CREATE INDEX entries_lookup ON entries (language, pack_id, time_of_day);
+CREATE INDEX entry_weather_groups_lookup ON entry_weather_groups (weather_group, entry_id);
 
 -- ---------------------------------------------------------------------------
 -- 쿼리
@@ -55,28 +79,32 @@ SELECT * FROM packs ORDER BY sort_order, id;
 basePackIds:
 SELECT id FROM packs WHERE is_base = 1;
 
--- 결정론 경로. 보유 팩이 후보 집합을 바꾸므로 팩도 시드의 일부처럼 취급해야 한다.
--- 정렬은 PageSelector 가 다시 하지만, 여기서도 id 순으로 내보내 디버깅을 쉽게 한다.
+-- 결정론 경로. 보유 팩이 후보 집합을 바꾸므로 팩도 계약의 입력이다.
+-- 정렬은 PageSelector 가 다시 하지만 여기서도 id 순으로 내보내 디버깅을 쉽게 한다.
 candidateIdsForBucket:
-SELECT id FROM entries
-WHERE language = :language
-  AND weather_group = :weatherGroup
-  AND time_of_day = :timeOfDay
-  AND pack_id IN :ownedPackIds
-ORDER BY id;
+SELECT e.id
+FROM entries e
+JOIN entry_weather_groups g ON g.entry_id = e.id
+WHERE e.language = :language
+  AND g.weather_group = :weatherGroup
+  AND (e.time_of_day IS NULL OR e.time_of_day = :timeOfDay)
+  AND e.pack_id IN :ownedPackIds
+ORDER BY e.id;
 
 entryById:
 SELECT * FROM entries WHERE id = :id;
 
-entriesByIds:
-SELECT * FROM entries WHERE id IN :ids ORDER BY id;
+weatherGroupsFor:
+SELECT weather_group FROM entry_weather_groups WHERE entry_id = :entryId ORDER BY weather_group;
 
--- 커버리지 점검용. 보유 팩 기준으로 비어 있는 버킷이 있으면 그날 화면이 빈다.
-bucketCoverage:
-SELECT weather_group, time_of_day, COUNT(*) AS entry_count
-FROM entries
-WHERE language = :language AND pack_id IN :ownedPackIds
-GROUP BY weather_group, time_of_day;
+-- 커버리지 점검용.
+-- time_of_day 가 NULL 인 행은 모든 시간대를 덮으므로 Kotlin 쪽에서 펼쳐 계산한다.
+coverageByGroupAndTime:
+SELECT g.weather_group AS weather_group, e.time_of_day AS time_of_day, COUNT(*) AS entry_count
+FROM entries e
+JOIN entry_weather_groups g ON g.entry_id = e.id
+WHERE e.language = :language AND e.pack_id IN :ownedPackIds
+GROUP BY g.weather_group, e.time_of_day;
 
 countByPack:
 SELECT pack_id, COUNT(*) AS entry_count FROM entries GROUP BY pack_id;
