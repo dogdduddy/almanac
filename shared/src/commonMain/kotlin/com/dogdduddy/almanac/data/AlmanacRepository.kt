@@ -58,18 +58,26 @@ class AlmanacRepository(
     }
 
     /**
-     * 베이스 팩을 보유하고 있지 않으면 부여한다.
+     * 무료로 자동 지급되는 팩을 부여한다. 설치 직후와 앱 시작 시 호출한다.
      *
-     * 테마 팩은 24버킷을 다 덮지 못한다 (바다 문학 팩에 눈 문장이 없듯이).
-     * 베이스 팩이 없으면 특정 날씨에만 화면이 비는, 재현하기 어려운 버그가 된다.
-     * 그래서 **모든 유저는 항상 베이스 팩을 보유한다**를 불변식으로 강제한다.
+     * `auto_grant` 로 고르지 `is_base` 로 고르지 않는다 — 스타터도 전체 팩도 둘 다
+     * 전 그룹을 덮으므로, 커버리지만 보고 지급하면 유료 콘텐츠가 통째로 넘어간다.
      */
     fun ensureBaseEntitlement() {
         val owned = ownedPackIds().toSet()
-        contentQueries.basePackIds().executeAsList()
+        contentQueries.autoGrantPackIds().executeAsList()
             .filterNot { it in owned }
             .forEach { grantPack(it, PackSource.BUNDLED) }
     }
+
+    /**
+     * 보유 팩이 8개 날씨 그룹을 전부 덮는지.
+     *
+     * 테마 팩만 보유하는 상태가 되면 특정 날씨에만 화면이 비는, 재현하기 어려운
+     * 버그가 된다. 앱 시작 시 이걸 검사해 거짓이면 자동 지급 팩을 다시 붙인다.
+     */
+    fun hasFullWeatherCoverage(language: String): Boolean =
+        emptyBuckets(language).isEmpty()
 
     // ---- 페이지 선택 ---------------------------------------------------------
 

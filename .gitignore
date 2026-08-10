@@ -10,3 +10,6 @@ local.properties
 xcuserdata/
 *.xcworkspace/xcuserdata/
 DerivedData/
+
+# content.db 는 bakeContent 태스크가 굽는 생성물
+androidApp/src/main/assets/content.db

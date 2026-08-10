@@ -14,9 +14,14 @@ CREATE TABLE packs (
     id            TEXT    NOT NULL PRIMARY KEY,
     title         TEXT    NOT NULL,
     subtitle      TEXT,
-    -- 8개 날씨 그룹을 전부 덮는 베이스 팩인지. 유저는 항상 이런 팩을 최소 하나 보유해야 한다.
+    -- 8개 날씨 그룹을 전부 덮는가. 유저는 이런 팩을 항상 최소 하나 보유해야 한다.
     -- 테마 팩(예: 바다 문학)은 눈·안개가 비므로 단독 공급원이 될 수 없다.
     is_base       INTEGER NOT NULL DEFAULT 0,
+    -- 설치 시 자동 지급되는가 (= 무료).
+    --
+    -- is_base 와 반드시 분리해야 한다. 스타터도 전체 팩도 둘 다 전 그룹을 덮으므로
+    -- 커버리지만 보고 지급하면 무료 유저에게 유료 콘텐츠가 통째로 넘어간다.
+    auto_grant    INTEGER NOT NULL DEFAULT 0,
     sort_order    INTEGER NOT NULL DEFAULT 0
 );
 
@@ -75,6 +80,10 @@ CREATE INDEX entry_weather_groups_lookup ON entry_weather_groups (weather_group,
 
 allPacks:
 SELECT * FROM packs ORDER BY sort_order, id;
+
+-- 설치 시 자동 지급할 팩 (무료 스타터).
+autoGrantPackIds:
+SELECT id FROM packs WHERE auto_grant = 1;
 
 basePackIds:
 SELECT id FROM packs WHERE is_base = 1;

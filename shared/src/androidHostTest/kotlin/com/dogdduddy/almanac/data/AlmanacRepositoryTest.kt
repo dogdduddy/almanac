@@ -51,8 +51,8 @@ class AlmanacRepositoryTest {
      */
     private fun seedContent() {
         content.contentQueries.transaction {
-            insertPack("base-2026", "The Almanac", isBase = true, order = 0)
-            insertPack("sea-1851", "Sea & Storm", isBase = false, order = 1)
+            insertPack("base-2026", "The Almanac", isBase = true, autoGrant = true, order = 0)
+            insertPack("sea-1851", "Sea & Storm", isBase = false, autoGrant = false, order = 1)
 
             var id = 1L
             for (bucket in Bucket.ALL) {
@@ -74,14 +74,23 @@ class AlmanacRepositoryTest {
         content.contentQueries.transaction { insertEntry(id, "base-2026", groups, timeOfDay) }
     }
 
-    private fun insertPack(id: String, title: String, isBase: Boolean, order: Int) {
+    private fun insertPack(
+        id: String,
+        title: String,
+        isBase: Boolean,
+        autoGrant: Boolean,
+        order: Int,
+    ) {
         contentDriver.execute(
             null,
-            "INSERT INTO packs (id, title, subtitle, is_base, sort_order) VALUES (?, ?, NULL, ?, ?)",
-            4,
+            "INSERT INTO packs (id, title, subtitle, is_base, auto_grant, sort_order) " +
+                "VALUES (?, ?, NULL, ?, ?, ?)",
+            5,
         ) {
             bindString(0, id); bindString(1, title)
-            bindLong(2, if (isBase) 1L else 0L); bindLong(3, order.toLong())
+            bindLong(2, if (isBase) 1L else 0L)
+            bindLong(3, if (autoGrant) 1L else 0L)
+            bindLong(4, order.toLong())
         }
     }
 
@@ -151,9 +160,32 @@ class AlmanacRepositoryTest {
     }
 
     @Test
-    fun ensureBaseEntitlementGrantsBasePacksOnly() {
+    fun ensureBaseEntitlementGrantsAutoGrantPacksOnly() {
         repo.ensureBaseEntitlement()
+        // sea-1851 은 is_base=0 이자 auto_grant=0 이므로 지급되면 안 된다.
         assertEquals(listOf("base-2026"), repo.ownedPackIds())
+    }
+
+    /**
+     * 유료 팩이 전 그룹을 덮더라도(=is_base) 자동 지급되면 안 된다.
+     * is_base 로 지급을 판단하면 유료 콘텐츠가 통째로 넘어간다.
+     */
+    @Test
+    fun basePackThatIsNotAutoGrantIsNeverGrantedForFree() {
+        contentDriver.execute(
+            null,
+            "INSERT INTO packs (id, title, subtitle, is_base, auto_grant, sort_order) " +
+                "VALUES ('full-2026', 'Full', NULL, 1, 0, 2)",
+            0,
+        )
+        repo.ensureBaseEntitlement()
+        assertTrue("full-2026" !in repo.ownedPackIds(), "유료 팩이 무료로 지급됐다")
+    }
+
+    @Test
+    fun autoGrantPackCoversEveryWeatherGroup() {
+        repo.ensureBaseEntitlement()
+        assertTrue(repo.hasFullWeatherCoverage("en"), "자동 지급 팩만으로 전 그룹이 덮여야 한다")
     }
 
     @Test
