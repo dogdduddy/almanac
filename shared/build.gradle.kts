@@ -1,6 +1,30 @@
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidKmpLibrary)
+    alias(libs.plugins.sqldelight)
+}
+
+/**
+ * DB 는 반드시 둘로 나눈다. 절대 합치지 말 것.
+ *
+ * - content: 읽기 전용. 앱 에셋에 번들되고 앱 업데이트마다 통째로 교체된다.
+ *   교체가 전제라 마이그레이션이라는 개념이 없다 — 스키마는 언제든 자유롭게 바꿔도 된다.
+ * - user: 쓰기 가능. 기기 내부 저장소. 히스토리·설치ID·보유 팩.
+ *   여기에 히스토리를 두지 않으면 업데이트마다 유저 아카이브가 날아간다.
+ */
+sqldelight {
+    databases {
+        create("ContentDatabase") {
+            packageName.set("com.dogdduddy.almanac.db.content")
+            srcDirs.setFrom("src/commonMain/sqldelight/content")
+        }
+        create("UserDatabase") {
+            packageName.set("com.dogdduddy.almanac.db.user")
+            srcDirs.setFrom("src/commonMain/sqldelight/user")
+            // user.db 는 유저 데이터가 들어 있으므로 마이그레이션 검증을 켠다.
+            verifyMigrations.set(true)
+        }
+    }
 }
 
 kotlin {
@@ -29,9 +53,21 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.sqldelight.runtime)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
+        }
+        androidMain.dependencies {
+            implementation(libs.sqldelight.android.driver)
+        }
+        iosMain.dependencies {
+            implementation(libs.sqldelight.native.driver)
+        }
+        // DB 를 붙인 테스트는 JVM 호스트에서만 돈다. 인메모리 JDBC 드라이버를 쓴다.
+        // 순수 로직(PageSelector)의 크로스플랫폼 동일성은 commonTest 가 이미 양쪽에서 검증한다.
+        getByName("androidHostTest").dependencies {
+            implementation(libs.sqldelight.sqlite.driver)
         }
     }
 }

@@ -1,0 +1,75 @@
+-- user.db — 쓰기 가능. 기기 내부 저장소.
+--
+-- content.db 와 절대 합치지 않는다. 출시 후 매주 문장을 추가하는 계획이 있고,
+-- 그때마다 content.db 는 통째로 교체되므로 히스토리를 거기 두면 유저 아카이브가 소실된다.
+--
+-- 이 파일은 유저 데이터를 담으므로 스키마 변경 시 반드시 .sqm 마이그레이션을 동반한다.
+
+-- 설치 단위 정보. 행은 항상 하나다.
+CREATE TABLE install (
+    id            INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+    -- 소문자 UUID v4. 시드 입력이므로 대소문자가 섞이면 문장이 갈라진다.
+    install_id    TEXT    NOT NULL,
+    created_at    INTEGER NOT NULL
+);
+
+-- 보유 팩. 무료 스타터도 여기 들어간다 (source = 'bundled').
+-- 결제 상태를 진실의 원천으로 두지 않는다 — RevenueCat 이 원천이고 여기는 캐시다.
+CREATE TABLE owned_packs (
+    pack_id       TEXT    NOT NULL PRIMARY KEY,
+    acquired_at   INTEGER NOT NULL,
+    source        TEXT    NOT NULL  -- 'bundled' | 'purchase' | 'restore'
+);
+
+-- 표시 이력. 아카이브이자 히스토리 회피의 근거.
+-- (날짜, 시간대, 위치) 로 유일하다 — 같은 슬롯을 여러 번 그려도 한 줄만 남는다.
+CREATE TABLE daily_page (
+    date          TEXT    NOT NULL,
+    time_of_day   TEXT    NOT NULL,
+    location_key  TEXT    NOT NULL,
+    entry_id      INTEGER NOT NULL,
+    weather_group TEXT    NOT NULL,
+    wind_flag     INTEGER NOT NULL,
+    shown_at      INTEGER NOT NULL,
+    PRIMARY KEY (date, time_of_day, location_key)
+);
+
+CREATE INDEX daily_page_recent ON daily_page (shown_at DESC);
+
+-- ---------------------------------------------------------------------------
+-- 쿼리
+-- ---------------------------------------------------------------------------
+
+selectInstall:
+SELECT * FROM install WHERE id = 1;
+
+insertInstall:
+INSERT OR IGNORE INTO install (id, install_id, created_at) VALUES (1, ?, ?);
+
+ownedPackIds:
+SELECT pack_id FROM owned_packs ORDER BY pack_id;
+
+grantPack:
+INSERT OR REPLACE INTO owned_packs (pack_id, acquired_at, source) VALUES (?, ?, ?);
+
+revokePack:
+DELETE FROM owned_packs WHERE pack_id = ?;
+
+-- PageSelector 의 recentlyShownIds 입력. **최신순**이어야 한다.
+recentEntryIds:
+SELECT entry_id FROM daily_page ORDER BY shown_at DESC LIMIT :limit;
+
+recordPage:
+INSERT OR REPLACE INTO daily_page (
+    date, time_of_day, location_key, entry_id, weather_group, wind_flag, shown_at
+) VALUES (?, ?, ?, ?, ?, ?, ?);
+
+pageFor:
+SELECT * FROM daily_page
+WHERE date = :date AND time_of_day = :timeOfDay AND location_key = :locationKey;
+
+archive:
+SELECT * FROM daily_page ORDER BY date DESC, time_of_day DESC LIMIT :limit OFFSET :offset;
+
+archiveCount:
+SELECT COUNT(*) FROM daily_page;

@@ -1,0 +1,82 @@
+-- content.db — 읽기 전용. 앱 에셋에 번들되고 업데이트마다 통째로 교체된다.
+--
+-- 여기에는 유저 데이터를 절대 넣지 않는다. 교체될 때 같이 날아간다.
+-- 반대로 교체가 전제이므로 이 스키마는 마이그레이션 없이 자유롭게 바꿔도 된다.
+
+-- 문장 묶음. 무료 스타터도, 유료 전체도, 나중의 작가 테마도 전부 팩이다.
+-- 판매 시스템은 아직 없지만 라벨은 큐레이션 시점에 붙는 게 압도적으로 싸므로 지금부터 둔다.
+CREATE TABLE packs (
+    id            TEXT    NOT NULL PRIMARY KEY,
+    title         TEXT    NOT NULL,
+    subtitle      TEXT,
+    -- 24버킷을 전부 덮는 베이스 팩인지. 유저는 항상 이런 팩을 최소 하나 보유해야 한다.
+    -- 테마 팩(예: 바다 문학)은 눈·안개 버킷이 비므로 단독 공급원이 될 수 없다.
+    is_base       INTEGER NOT NULL DEFAULT 0,
+    sort_order    INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE entries (
+    id            INTEGER NOT NULL PRIMARY KEY,
+    pack_id       TEXT    NOT NULL REFERENCES packs(id),
+
+    text          TEXT    NOT NULL,
+    author        TEXT    NOT NULL,
+    title         TEXT    NOT NULL,
+    -- 화면의 주인공은 "몇 년 전에 쓰였는가" 이므로 연도는 NOT NULL 이다.
+    year          INTEGER NOT NULL,
+    -- 구텐베르크 도서 번호 등. 저작권 소명용이라 필수.
+    source_id     TEXT    NOT NULL,
+    language      TEXT    NOT NULL,
+
+    -- 하드 키. 이 둘이 버킷을 이룬다.
+    weather_group TEXT    NOT NULL,
+    time_of_day   TEXT    NOT NULL,
+
+    -- 하드 키가 아니라 가중치다. 커버리지 구멍을 막기 위해 필터가 아닌 선호로만 쓴다.
+    -- 형식: "winter=1.5" 같은 콤마 구분 쌍. 비어 있으면 중립.
+    -- 아직 선택 엔진이 소비하지 않는다 (구현 전).
+    season_weight TEXT,
+    temp_weight   TEXT,
+
+    word_count    INTEGER NOT NULL,
+    license_note  TEXT    NOT NULL
+);
+
+-- 후보 조회는 (언어 + 버킷 + 보유 팩) 으로만 일어난다.
+CREATE INDEX entries_lookup ON entries (language, weather_group, time_of_day, pack_id);
+
+-- ---------------------------------------------------------------------------
+-- 쿼리
+-- ---------------------------------------------------------------------------
+
+allPacks:
+SELECT * FROM packs ORDER BY sort_order, id;
+
+basePackIds:
+SELECT id FROM packs WHERE is_base = 1;
+
+-- 결정론 경로. 보유 팩이 후보 집합을 바꾸므로 팩도 시드의 일부처럼 취급해야 한다.
+-- 정렬은 PageSelector 가 다시 하지만, 여기서도 id 순으로 내보내 디버깅을 쉽게 한다.
+candidateIdsForBucket:
+SELECT id FROM entries
+WHERE language = :language
+  AND weather_group = :weatherGroup
+  AND time_of_day = :timeOfDay
+  AND pack_id IN :ownedPackIds
+ORDER BY id;
+
+entryById:
+SELECT * FROM entries WHERE id = :id;
+
+entriesByIds:
+SELECT * FROM entries WHERE id IN :ids ORDER BY id;
+
+-- 커버리지 점검용. 보유 팩 기준으로 비어 있는 버킷이 있으면 그날 화면이 빈다.
+bucketCoverage:
+SELECT weather_group, time_of_day, COUNT(*) AS entry_count
+FROM entries
+WHERE language = :language AND pack_id IN :ownedPackIds
+GROUP BY weather_group, time_of_day;
+
+countByPack:
+SELECT pack_id, COUNT(*) AS entry_count FROM entries GROUP BY pack_id;
