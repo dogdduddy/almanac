@@ -39,6 +39,25 @@ data class FetchMeta(
     val lastModified: String?,
 )
 
+/**
+ * 날씨 출처. 구현은 [MetNorwayClient] 하나뿐이지만, 저장소가 Ktor 없이
+ * 테스트될 수 있도록 인터페이스로 끊는다.
+ */
+interface WeatherSource {
+    suspend fun fetchWeather(
+        latitude: Double,
+        longitude: Double,
+        lastModified: String? = null,
+    ): WeatherFetch
+
+    suspend fun fetchSunTimes(
+        latitude: Double,
+        longitude: Double,
+        date: String,
+        utcOffset: String,
+    ): SunTimes?
+}
+
 sealed interface WeatherFetch {
     /** 새 데이터를 받았다. */
     data class Updated(val snapshot: WeatherSnapshot, val meta: FetchMeta) : WeatherFetch

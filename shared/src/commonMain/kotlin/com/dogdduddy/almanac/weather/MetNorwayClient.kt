@@ -25,17 +25,17 @@ class MetNorwayClient(
     private val httpClient: HttpClient,
     private val userAgent: String = DEFAULT_USER_AGENT,
     private val nowEpochSeconds: () -> Long,
-) {
+) : WeatherSource {
 
     /**
      * 현재 시각 기준 날씨. 캐시가 만료됐을 때만 부를 것.
      *
      * @param lastModified 직전 응답의 `Last-Modified`. 있으면 `If-Modified-Since` 로 보낸다
      */
-    suspend fun fetchWeather(
+    override suspend fun fetchWeather(
         latitude: Double,
         longitude: Double,
-        lastModified: String? = null,
+        lastModified: String?,
     ): WeatherFetch = runCatchingFetch {
         val response = httpClient.get("$BASE_URL/locationforecast/2.0/compact") {
             header(HttpHeaders.UserAgent, userAgent)
@@ -83,7 +83,7 @@ class MetNorwayClient(
      * @param date 로컬 달력 날짜 `yyyy-MM-dd`
      * @param utcOffset `+09:00` 형식
      */
-    suspend fun fetchSunTimes(
+    override suspend fun fetchSunTimes(
         latitude: Double,
         longitude: Double,
         date: String,
