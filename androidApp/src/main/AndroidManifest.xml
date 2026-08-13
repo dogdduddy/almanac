@@ -1,6 +1,18 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!--
+      위치는 선택 사항이다. 거부해도 도시를 직접 고르면 앱이 온전히 동작한다.
+      COARSE 로 충분하다 — 날씨 예보는 격자 셀 단위라 정밀 좌표가 필요 없고,
+      권한 다이얼로그의 문턱도 낮다.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <uses-feature
+        android:name="android.hardware.location"
+        android:required="false" />
+
     <application
         android:allowBackup="true"
         android:icon="@android:drawable/ic_menu_compass"

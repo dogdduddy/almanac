@@ -36,6 +36,23 @@ CREATE TABLE daily_page (
 
 CREATE INDEX daily_page_recent ON daily_page (shown_at DESC);
 
+-- 확정된 위치. 행은 항상 하나다.
+--
+-- **위젯이 이 값을 읽는다.** 위젯은 권한을 요청할 수도, GPS 측위를 기다릴 수도 없다.
+-- 그래서 앱이 위치를 해결해 여기 저장하고 위젯은 조회만 한다.
+-- 앱을 한 번도 안 열었으면 기본 도시가 들어간다 — 위젯이 빈 화면이 되면 안 된다.
+CREATE TABLE saved_location (
+    id            INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+    latitude      REAL    NOT NULL,
+    longitude     REAL    NOT NULL,
+    -- 화면에 보여줄 이름. GPS 로 잡았으면 가장 가까운 도시 이름.
+    label         TEXT    NOT NULL,
+    -- 'gps' | 'manual' | 'default'
+    -- manual 은 유저의 명시적 선택이므로 GPS 보다 우선한다.
+    mode          TEXT    NOT NULL,
+    updated_at    INTEGER NOT NULL
+);
+
 -- 날씨 캐시.
 --
 -- **소모품이다** — 지워져도 유저가 잃는 것이 없다. 그래도 user.db 에 두는 이유는
@@ -107,6 +124,15 @@ SELECT * FROM daily_page ORDER BY date DESC, time_of_day DESC LIMIT :limit OFFSE
 
 archiveCount:
 SELECT COUNT(*) FROM daily_page;
+
+-- ---- 위치 ----
+
+savedLocation:
+SELECT * FROM saved_location WHERE id = 1;
+
+upsertLocation:
+INSERT OR REPLACE INTO saved_location (id, latitude, longitude, label, mode, updated_at)
+VALUES (1, ?, ?, ?, ?, ?);
 
 -- ---- 날씨 캐시 ----
 
