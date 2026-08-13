@@ -2,6 +2,9 @@ package com.dogdduddy.almanac.weather
 
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.serialization.kotlinx.json.json
+import kotlinx.serialization.json.Json
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
@@ -131,6 +134,24 @@ class MetNorwayClient(
         const val ATTRIBUTION = "Weather data from MET Norway (api.met.no), licensed under CC BY 4.0"
     }
 }
+
+/**
+ * 기본 설정으로 클라이언트를 만든다.
+ *
+ * 엔진을 명시하지 않으면 Ktor 가 플랫폼별로 클래스패스에 있는 것을 고른다
+ * (Android=OkHttp, iOS=Darwin). 덕분에 앱 모듈이 Ktor 를 몰라도 된다 —
+ * 조립 지점이 HTTP 세부사항을 알 이유가 없다.
+ */
+fun createMetNorwayClient(nowEpochSeconds: () -> Long): MetNorwayClient =
+    MetNorwayClient(
+        httpClient = HttpClient {
+            install(ContentNegotiation) {
+                // MET 은 우리가 안 쓰는 필드를 잔뜩 준다. 스키마가 늘어도 앱이 깨지면 안 된다.
+                json(Json { ignoreUnknownKeys = true })
+            }
+        },
+        nowEpochSeconds = nowEpochSeconds,
+    )
 
 private fun HttpStatusCode.isSuccess() = value in 200..299
 

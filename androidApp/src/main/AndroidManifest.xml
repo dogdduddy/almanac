@@ -31,34 +31,15 @@
             </intent-filter>
         </activity>
 
-        <!-- 스파이크 검증 화면. 결론이 나면 제거한다. -->
-        <activity
-            android:name=".widget.SpikeActivity"
-            android:exported="true"
-            android:theme="@style/Theme.Almanac" />
-
-        <!-- Glance 폰트 스파이크 전용 위젯. 결론이 나면 통째로 제거한다. -->
         <receiver
-            android:name=".widget.FontSpikeWidgetReceiver"
+            android:name=".widget.AlmanacWidgetReceiver"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/font_spike_widget_info" />
-        </receiver>
-
-        <!-- Glance 배제 대조군 위젯. 스파이크 전용. -->
-        <receiver
-            android:name=".widget.ClassicFontWidgetProvider"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/classic_font_widget_info" />
+                android:resource="@xml/almanac_widget_info" />
         </receiver>
 
     </application>

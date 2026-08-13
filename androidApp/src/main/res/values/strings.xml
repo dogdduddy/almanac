@@ -7,6 +7,23 @@
     <string name="app_name">Almanac</string>
     <string name="widget_description">오늘의 하늘을 쓴 문장</string>
 
-    <!-- Glance 폰트 스파이크 전용. 결론이 나면 통째로 삭제한다. -->
-    <string name="spike_sample_text">Wuthering Heights, 1847</string>
+    <!-- 화면의 주인공. 숫자가 가장 큰 활자로 나간다. -->
+    <string name="years_ago">%1$d years ago</string>
+
+    <!--
+      날씨별 한 줄. "someone watched this rain".
+      이 앱의 한 줄 컨셉("오늘의 하늘은 이미 오래전에 누군가 써놓았다")을
+      화면에서 실제로 말하는 문장이므로 번역 시에도 이 톤을 유지할 것.
+    -->
+    <string name="phrase_clear">someone watched this sky</string>
+    <string name="phrase_cloudy">someone watched these clouds</string>
+    <string name="phrase_fog">someone watched this fog</string>
+    <string name="phrase_drizzle">someone watched this drizzle</string>
+    <string name="phrase_rain">someone watched this rain</string>
+    <string name="phrase_snow">someone watched this snow</string>
+    <string name="phrase_thunder">someone watched this storm</string>
+    <string name="phrase_wind">someone watched this wind</string>
+
+    <string name="widget_no_weather">Waiting for the sky…</string>
+    <string name="widget_no_content">No passage for this weather yet.</string>
 </resources>

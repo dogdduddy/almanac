@@ -1,0 +1,162 @@
+package com.dogdduddy.almanac
+
+import com.dogdduddy.almanac.core.TimeOfDay
+import com.dogdduddy.almanac.core.WeatherGroup
+import com.dogdduddy.almanac.data.AlmanacRepository
+import com.dogdduddy.almanac.data.ResolvedPage
+import com.dogdduddy.almanac.location.LocationRepository
+import com.dogdduddy.almanac.weather.DeviceClock
+import com.dogdduddy.almanac.weather.WeatherRepository
+import com.dogdduddy.almanac.weather.civilFromDays
+
+/**
+ * 화면·위젯이 그리는 데 필요한 전부.
+ *
+ * 주인공은 문장이 아니라 **시간적 거리**다. [yearsAgo] 가 가장 큰 활자로 나간다.
+ */
+data class TodaysPage(
+    val yearsAgo: Int,
+    val text: String,
+    val author: String,
+    val title: String,
+    val section: String?,
+    val year: Int,
+    val weatherGroup: WeatherGroup,
+    val timeOfDay: TimeOfDay,
+    val locationLabel: String,
+    val dateKey: String,
+) {
+    /** "Wuthering Heights, 1847 · Emily Brontë" */
+    val attribution: String get() = "$title, $year · $author"
+
+    /**
+     * 앱의 한 줄 컨셉을 화면에서 실제로 말하는 문장.
+     *
+     * 지금은 영어 고정이다. Android 위젯은 문자열 리소스를 쓰고 있고,
+     * 공유 화면의 번역은 CMP resources 를 붙일 때 함께 옮긴다.
+     */
+    val weatherPhrase: String
+        get() = when (weatherGroup) {
+            WeatherGroup.CLEAR -> "someone watched this sky"
+            WeatherGroup.CLOUDY -> "someone watched these clouds"
+            WeatherGroup.FOG -> "someone watched this fog"
+            WeatherGroup.DRIZZLE -> "someone watched this drizzle"
+            WeatherGroup.RAIN -> "someone watched this rain"
+            WeatherGroup.SNOW -> "someone watched this snow"
+            WeatherGroup.THUNDER -> "someone watched this storm"
+            WeatherGroup.WIND -> "someone watched this wind"
+        }
+}
+
+/** 페이지를 못 만든 이유. 화면이 무엇을 안내할지 결정한다. */
+enum class PageUnavailable {
+    /** 날씨를 못 구했고 캐시도 없다. 보통 첫 실행 + 오프라인. */
+    NO_WEATHER,
+
+    /** 이 버킷에 문장이 없다. 큐레이션 구멍이거나 보유 팩이 좁다. */
+    NO_CONTENT,
+}
+
+sealed interface PageResult {
+    data class Ready(val page: TodaysPage) : PageResult
+    data class Unavailable(val reason: PageUnavailable) : PageResult
+}
+
+/**
+ * 앱과 위젯이 공유하는 단일 진입점.
+ *
+ * **위젯이 이 함수를 그대로 부른다.** 그래야 같은 순간에 같은 문장이 나온다 —
+ * 위젯이 자기만의 조회 경로를 가지면 결정론이 깨지고 캐시도 두 벌이 된다.
+ */
+class AlmanacService(
+    private val content: AlmanacRepository,
+    private val weather: WeatherRepository,
+    private val location: LocationRepository,
+    private val clock: DeviceClock,
+) {
+
+    /**
+     * @param refreshLocation 앱에서는 true, **위젯에서는 false**.
+     *   위젯은 측위를 기다릴 수 없으므로 저장된 위치만 쓴다.
+     */
+    suspend fun todaysPage(
+        language: String = "en",
+        refreshLocation: Boolean = false,
+    ): PageResult {
+        content.ensureBaseEntitlement()
+
+        val place = if (refreshLocation) location.refresh() else location.current()
+        val conditions = weather.currentConditions(
+            latitude = place.coordinates.latitude,
+            longitude = place.coordinates.longitude,
+        ) ?: return PageResult.Unavailable(PageUnavailable.NO_WEATHER)
+
+        val installId = content.installId { newInstallId(clock.nowEpochSeconds()) }
+
+        val resolved = content.resolvePage(
+            dateKey = conditions.dateKey,
+            timeOfDay = conditions.timeOfDay,
+            weatherGroup = conditions.weatherGroup,
+            language = language,
+            locationKey = conditions.locationKey,
+            windFlag = conditions.windFlag,
+            installId = installId,
+        ) ?: return PageResult.Unavailable(PageUnavailable.NO_CONTENT)
+
+        return PageResult.Ready(
+            resolved.toTodaysPage(
+                currentYear = currentYear(clock),
+                weatherGroup = conditions.weatherGroup,
+                timeOfDay = conditions.timeOfDay,
+                locationLabel = place.label,
+                dateKey = conditions.dateKey,
+            )
+        )
+    }
+}
+
+private fun ResolvedPage.toTodaysPage(
+    currentYear: Int,
+    weatherGroup: WeatherGroup,
+    timeOfDay: TimeOfDay,
+    locationLabel: String,
+    dateKey: String,
+) = TodaysPage(
+    yearsAgo = currentYear - entry.year.toInt(),
+    text = entry.text,
+    author = entry.author,
+    title = entry.title,
+    section = entry.section,
+    year = entry.year.toInt(),
+    weatherGroup = weatherGroup,
+    timeOfDay = timeOfDay,
+    locationLabel = locationLabel,
+    dateKey = dateKey,
+)
+
+internal fun currentYear(clock: DeviceClock): Int {
+    val key = clock.localDateKey(clock.nowEpochSeconds())
+    return key.substringBefore('-').toIntOrNull()
+        ?: civilFromDays(clock.nowEpochSeconds() / 86_400L).first
+}
+
+/**
+ * 설치 ID. UUID v4 형태의 소문자 문자열.
+ *
+ * 플랫폼 UUID API 에 의존하지 않는다 — 형식이 흔들리면 시드가 갈라지기 때문이다.
+ * 암호학적 강도는 필요 없다. 필요한 건 **설치마다 다르고 이후 불변**인 것뿐이다.
+ */
+internal fun newInstallId(seedEpochSeconds: Long): String {
+    var state = seedEpochSeconds.toULong() * 6364136223846793005uL + 1442695040888963407uL
+    fun nextHex(): Char {
+        state = state * 6364136223846793005uL + 1442695040888963407uL
+        return "0123456789abcdef"[((state shr 33) % 16uL).toInt()]
+    }
+    return buildString {
+        repeat(8) { append(nextHex()) }; append('-')
+        repeat(4) { append(nextHex()) }; append('-')
+        append('4'); repeat(3) { append(nextHex()) }; append('-')
+        append("89ab"[((state shr 29) % 4uL).toInt()]); repeat(3) { append(nextHex()) }; append('-')
+        repeat(12) { append(nextHex()) }
+    }
+}
