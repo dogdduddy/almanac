@@ -64,3 +64,20 @@ val syncContentToAndroid = tasks.register<Copy>("syncContentToAndroid") {
     from(bakedContentDb)
     into(layout.projectDirectory.dir("androidApp/src/main/assets"))
 }
+
+/** 구운 DB 를 iOS 번들 리소스로 넣는다. */
+val syncContentToIos = tasks.register<Copy>("syncContentToIos") {
+    group = "almanac"
+    description = "content.db 를 iosApp 리소스로 복사한다"
+    dependsOn(bakeContent)
+    enabled = hasCsvDir
+    from(bakedContentDb)
+    into(layout.projectDirectory.dir("iosApp/Almanac/Resources"))
+}
+
+/** 양 플랫폼에 한 번에. */
+tasks.register("syncContent") {
+    group = "almanac"
+    description = "content.db 를 Android/iOS 양쪽에 반영한다"
+    dependsOn(syncContentToAndroid, syncContentToIos)
+}

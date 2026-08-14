@@ -1,0 +1,85 @@
+# XcodeGen 정의. `xcodegen generate` 로 Almanac.xcodeproj 를 만든다.
+#
+# project.pbxproj 를 손으로 관리하지 않는 이유: 병합 충돌이 잦고 리뷰가 불가능하다.
+# 나중에 WidgetKit 익스텐션 타깃을 붙일 때도 여기 몇 줄이면 된다.
+#
+# 생성물(.xcodeproj)은 커밋하지 않는다 — 이 파일이 진실의 원천이다.
+
+name: Almanac
+
+options:
+  bundleIdPrefix: com.dogdduddy
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    ENABLE_USER_SCRIPT_SANDBOXING: NO   # Gradle 을 빌드 페이즈에서 돌려야 한다
+    DEVELOPMENT_TEAM: ""                # 시뮬레이터 빌드에는 불필요. 실기기 배포 시 채운다
+
+targets:
+  Almanac:
+    type: application
+    platform: iOS
+
+    sources:
+      - path: Almanac
+        excludes:
+          - "Resources/**"
+      # 구운 content.db. bakeContent → syncContentToIos 가 채운다.
+      # 없으면 앱은 빌드되지만 첫 실행에서 문장을 못 찾는다.
+      #
+      # type: folder 로 두면 안 된다 — Xcode 가 폴더 참조를 중첩 코드 객체로 보고
+      # 코드서명 단계에서 "code object is not signed at all" 로 실패한다.
+      # 리소스 빌드 페이즈로 명시해야 한다.
+      - path: Almanac/Resources
+        buildPhase: resources
+        optional: true
+
+    info:
+      path: Almanac/Info.plist
+      properties:
+        CFBundleDisplayName: Almanac
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        # Compose Multiplatform 필수. 없으면 앱이 **시작하자마자 예외로 죽는다**
+        # (경고가 아니라 IllegalStateException 이다).
+        # 이게 없으면 120Hz 기기에서 60Hz 로 묶여 애니메이션이 눈에 띄게 끊긴다 —
+        # 역방향 페이지 넘김이 이 앱의 핵심 연출이므로 특히 중요하다.
+        CADisableMinimumFrameDurationOnPhone: true
+        # 위치는 선택 사항이다. 거부해도 도시를 직접 고르면 앱이 온전히 동작한다.
+        NSLocationWhenInUseUsageDescription: >-
+          Almanac uses your location only to look up today's weather,
+          so it can find a passage written about the same sky.
+
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.dogdduddy.almanac
+        FRAMEWORK_SEARCH_PATHS:
+          - $(inherited)
+          - $(SRCROOT)/../composeApp/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)
+        OTHER_LDFLAGS:
+          - $(inherited)
+          - -framework
+          - ComposeApp
+          # SQLDelight 의 네이티브 드라이버(sqliter)는 시스템 sqlite3 를 호출만 하고
+          # 자기가 품고 있지 않다. 이걸 빼면 링크 단계에서 _sqlite3_* 전부 미해결로 터진다.
+          - -lsqlite3
+        CODE_SIGNING_ALLOWED: YES
+        CODE_SIGN_IDENTITY: ""
+        CODE_SIGNING_REQUIRED: NO
+
+    preBuildScripts:
+      - name: Compile Kotlin framework
+        # KMP 표준 태스크. Xcode 가 넘겨주는 CONFIGURATION/SDK_NAME/ARCHS 를 읽어
+        # 맞는 아키텍처로 빌드하고 결과를 xcode-frameworks 에 놓는다.
+        script: |
+          cd "$SRCROOT/.."
+          ./gradlew :composeApp:embedAndSignAppleFrameworkForXcode
+        basedOnDependencyAnalysis: false

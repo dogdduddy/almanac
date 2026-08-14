@@ -13,3 +13,9 @@ DerivedData/
 
 # content.db 는 bakeContent 태스크가 굽는 생성물
 androidApp/src/main/assets/content.db
+
+# XcodeGen 생성물 — project.yml 이 진실의 원천이다
+iosApp/Almanac.xcodeproj/
+iosApp/build/
+# content.db 는 bakeContent 태스크가 굽는 생성물
+iosApp/Almanac/Resources/content.db
