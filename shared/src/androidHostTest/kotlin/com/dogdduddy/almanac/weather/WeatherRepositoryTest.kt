@@ -53,7 +53,7 @@ class WeatherRepositoryTest {
         val conditions = repo.currentConditions(lat, lon)
         assertNotNull(conditions)
         assertEquals(1, source.weatherCalls)
-        assertEquals("37.5665,126.9780", conditions.locationKey)
+        assertEquals("37.57,126.98", conditions.locationKey)
         assertEquals(WeatherGroup.CLOUDY, conditions.weatherGroup)
         assertTrue(!conditions.servedFromCache)
     }

@@ -75,8 +75,22 @@ object WeatherCachePolicy {
  */
 object LocationKey {
 
-    const val DECIMALS: Int = 4
-    private const val SCALE: Double = 10_000.0
+    /**
+     * 소수점 2자리 ≈ 1.1km.
+     *
+     * 처음에는 4자리(≈11m)로 뒀는데 에뮬레이터 실측에서 **같은 자리의 GPS 지터가
+     * 캐시 키를 3개로 쪼개는 것**을 확인했다. 위치가 조금 흔들릴 때마다 캐시가
+     * 빗나가고 API 를 새로 치므로, 1시간 규칙을 지켜도 요청 수가 늘어난다.
+     *
+     * MET 의 예보 격자는 1~2.5km 라 그보다 정밀할 이유가 없다.
+     * MET 이 요구하는 것도 "4자리 이하"이므로 2자리는 그 요구를 더 잘 만족한다.
+     *
+     * 이 값은 문장 선택 시드에 들어가지 않는다(시드는 날짜·시간대·날씨·설치ID).
+     * 따라서 바꿔도 **어떤 문장이 뽑히는지는 달라지지 않는다** — 캐시 적중률과
+     * daily_page 의 키만 달라진다.
+     */
+    const val DECIMALS: Int = 2
+    private const val SCALE: Double = 100.0
 
     fun round(value: Double): Double {
         val rounded = (value * SCALE).roundToLong() / SCALE
@@ -86,12 +100,13 @@ object LocationKey {
     fun format(latitude: Double, longitude: Double): String =
         "${fixed(round(latitude))},${fixed(round(longitude))}"
 
-    /** 소수점 4자리 고정 문자열. 플랫폼 로케일에 흔들리지 않도록 직접 만든다. */
+    /** 고정 소수점 문자열. 플랫폼 로케일에 흔들리지 않도록 직접 만든다. */
     private fun fixed(value: Double): String {
         val negative = value < 0
         val scaled = (abs(value) * SCALE).roundToLong()
-        val whole = scaled / 10_000
-        val frac = (scaled % 10_000).toString().padStart(DECIMALS, '0')
+        val unit = SCALE.toLong()
+        val whole = scaled / unit
+        val frac = (scaled % unit).toString().padStart(DECIMALS, '0')
         return "${if (negative) "-" else ""}$whole.$frac"
     }
 }

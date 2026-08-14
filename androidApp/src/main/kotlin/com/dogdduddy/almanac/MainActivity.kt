@@ -28,7 +28,23 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        setContent { App(state = state, onAddWidget = ::requestPinWidget) }
+        setContent {
+            App(
+                state = state,
+                actions = AppActions(
+                    onAddWidget = ::requestPinWidget,
+                    onSelectCity = { city ->
+                        AlmanacGraph.service(this).selectCity(city)
+                        // 위치가 바뀌면 날씨도 문장도 바뀐다. 즉시 다시 그린다.
+                        load()
+                    },
+                    onUseGps = {
+                        AlmanacGraph.service(this).useGps()
+                        load()
+                    },
+                ),
+            )
+        }
 
         val source = com.dogdduddy.almanac.location.AndroidLocationSource(this)
         if (!source.hasPermission()) {
@@ -43,8 +59,11 @@ class MainActivity : ComponentActivity() {
             // 앱에서는 측위를 시도한다. 위젯과 달리 사용자를 잠시 기다리게 할 수 있다.
             state = when (val result = AlmanacGraph.service(this@MainActivity)
                 .pages(refreshLocation = true)) {
-                is PagesState.Ready -> AppState.Ready(result.pages)
-                is PagesState.Empty -> AppState.Empty(result.reason)
+                is PagesState.Ready ->
+                    AppState.Ready(result.pages, result.locationLabel, result.locationMode)
+
+                is PagesState.Empty ->
+                    AppState.Empty(result.reason, result.locationLabel, result.locationMode)
             }
         }
     }

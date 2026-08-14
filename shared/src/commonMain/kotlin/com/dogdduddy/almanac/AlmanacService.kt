@@ -4,7 +4,10 @@ import com.dogdduddy.almanac.core.TimeOfDay
 import com.dogdduddy.almanac.core.WeatherGroup
 import com.dogdduddy.almanac.data.AlmanacRepository
 import com.dogdduddy.almanac.data.ResolvedPage
+import com.dogdduddy.almanac.location.City
+import com.dogdduddy.almanac.location.LocationMode
 import com.dogdduddy.almanac.location.LocationRepository
+import com.dogdduddy.almanac.location.ResolvedLocation
 import com.dogdduddy.almanac.weather.DeviceClock
 import com.dogdduddy.almanac.weather.WeatherRepository
 import com.dogdduddy.almanac.weather.civilFromDays
@@ -147,25 +150,49 @@ class AlmanacService(
             )
         }
 
+        val place = location.current()
         return when (today) {
             is PageResult.Ready -> {
                 // 오늘 기록은 이미 daily_page 에 저장돼 아카이브 첫 줄과 겹친다. 중복 제거.
                 val withoutToday = past.filterNot {
                     it.dateKey == today.page.dateKey && it.timeOfDay == today.page.timeOfDay
                 }
-                PagesState.Ready(listOf(today.page) + withoutToday)
+                PagesState.Ready(listOf(today.page) + withoutToday, place.label, place.mode)
             }
 
             is PageResult.Unavailable ->
-                if (past.isEmpty()) PagesState.Empty(today.reason) else PagesState.Ready(past)
+                if (past.isEmpty()) {
+                    PagesState.Empty(today.reason, place.label, place.mode)
+                } else {
+                    PagesState.Ready(past, place.label, place.mode)
+                }
         }
     }
+
+    // ---- 위치 선택 -----------------------------------------------------------
+
+    fun currentPlace(): ResolvedLocation = location.current()
+
+    /** 유저가 도시를 골랐다. 이후 GPS 는 이 선택을 덮지 않는다. */
+    fun selectCity(city: City): ResolvedLocation = location.selectCity(city)
+
+    /** 수동 선택을 풀고 GPS 로 되돌린다. */
+    fun useGps(): ResolvedLocation = location.useGps()
 }
 
 sealed interface PagesState {
     /** `pages[0]` 이 가장 최신이다. */
-    data class Ready(val pages: List<TodaysPage>) : PagesState
-    data class Empty(val reason: PageUnavailable) : PagesState
+    data class Ready(
+        val pages: List<TodaysPage>,
+        val locationLabel: String,
+        val locationMode: LocationMode,
+    ) : PagesState
+
+    data class Empty(
+        val reason: PageUnavailable,
+        val locationLabel: String,
+        val locationMode: LocationMode,
+    ) : PagesState
 }
 
 private fun ResolvedPage.toTodaysPage(

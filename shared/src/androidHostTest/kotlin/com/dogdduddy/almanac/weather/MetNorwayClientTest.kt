@@ -109,13 +109,17 @@ class MetNorwayClientTest {
         assertTrue(ua.contains("@"), "연락처가 없다: $ua")
     }
 
-    /** MET 은 좌표를 소수점 4자리 이하로 잘라 보낼 것을 요구한다. */
+    /**
+     * MET 은 좌표를 소수점 4자리 **이하**로 잘라 보낼 것을 요구한다.
+     * 우리는 2자리를 쓴다 — 예보 격자가 1~2.5km 라 그보다 정밀할 이유가 없고,
+     * GPS 지터가 캐시를 쪼개는 것을 실측으로 확인했다.
+     */
     @Test
     fun roundsCoordinatesBeforeSending() = runTest {
         client().fetchWeather(37.56652871, 126.97803123)
         val url = captured?.url.toString()
-        assertTrue("lat=37.5665" in url, url)
-        assertTrue("lon=126.978" in url, url)
+        assertTrue("lat=37.57" in url, url)
+        assertTrue("lon=126.98" in url, url)
     }
 
     @Test
