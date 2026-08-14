@@ -42,9 +42,9 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             // 앱에서는 측위를 시도한다. 위젯과 달리 사용자를 잠시 기다리게 할 수 있다.
             state = when (val result = AlmanacGraph.service(this@MainActivity)
-                .todaysPage(refreshLocation = true)) {
-                is PageResult.Ready -> AppState.Ready(result.page)
-                is PageResult.Unavailable -> AppState.Empty(result.reason)
+                .pages(refreshLocation = true)) {
+                is PagesState.Ready -> AppState.Ready(result.pages)
+                is PagesState.Empty -> AppState.Empty(result.reason)
             }
         }
     }

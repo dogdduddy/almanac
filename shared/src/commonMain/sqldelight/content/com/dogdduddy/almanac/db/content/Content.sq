@@ -103,6 +103,14 @@ ORDER BY e.id;
 entryById:
 SELECT * FROM entries WHERE id = :id;
 
+-- 아카이브 조립용.
+--
+-- daily_page 는 user.db 에, entries 는 content.db 에 있어 **SQL 조인이 불가능하다.**
+-- 두 DB 를 합치지 않는 것이 설계 의도이므로(업데이트 시 아카이브 보존),
+-- 조립은 Kotlin 쪽에서 한다.
+entriesByIds:
+SELECT * FROM entries WHERE id IN :ids;
+
 weatherGroupsFor:
 SELECT weather_group FROM entry_weather_groups WHERE entry_id = :entryId ORDER BY weather_group;
 

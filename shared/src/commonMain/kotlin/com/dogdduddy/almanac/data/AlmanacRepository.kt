@@ -9,6 +9,15 @@ import com.dogdduddy.almanac.db.content.ContentDatabase
 import com.dogdduddy.almanac.db.content.Entries
 import com.dogdduddy.almanac.db.user.UserDatabase
 
+/** 지난 기록 한 장. */
+data class ArchivedPage(
+    val dateKey: String,
+    val timeOfDay: TimeOfDay,
+    val weatherGroup: WeatherGroup,
+    val windFlag: Boolean,
+    val entry: Entries,
+)
+
 /** 화면에 필요한 전부. 엔트리 + 어떻게 골랐는지. */
 data class ResolvedPage(
     val entry: Entries,
@@ -159,6 +168,38 @@ class AlmanacRepository(
 
     fun archive(limit: Int, offset: Int = 0) =
         userQueries.archive(limit.toLong(), offset.toLong()).executeAsList()
+
+    /**
+     * 아카이브 한 페이지. 기록(user.db)과 문장(content.db)을 Kotlin 에서 합친다.
+     *
+     * 두 DB 는 파일이 다르므로 SQL 조인을 쓸 수 없다. 그건 설계 의도다 —
+     * content.db 는 업데이트마다 통째로 교체되고 아카이브는 살아남아야 한다.
+     *
+     * 그 대가로 **기록은 있는데 문장이 사라진 경우**가 생길 수 있다.
+     * 큐레이션에서 발췌를 뺐다면 그렇다. 그런 행은 조용히 건너뛴다 —
+     * 빈 카드를 보여주느니 없는 편이 낫다.
+     */
+    fun archivedPages(limit: Int, offset: Int = 0): List<ArchivedPage> {
+        val rows = userQueries.archive(limit.toLong(), offset.toLong()).executeAsList()
+        if (rows.isEmpty()) return emptyList()
+
+        val entries = contentQueries.entriesByIds(rows.map { it.entry_id }.distinct())
+            .executeAsList()
+            .associateBy { it.id }
+
+        return rows.mapNotNull { row ->
+            val entry = entries[row.entry_id] ?: return@mapNotNull null
+            val group = WeatherGroup.fromKey(row.weather_group) ?: return@mapNotNull null
+            val timeOfDay = TimeOfDay.fromKey(row.time_of_day) ?: return@mapNotNull null
+            ArchivedPage(
+                dateKey = row.date,
+                timeOfDay = timeOfDay,
+                weatherGroup = group,
+                windFlag = row.wind_flag != 0L,
+                entry = entry,
+            )
+        }
+    }
 }
 
 enum class PackSource(val wire: String) {

@@ -113,6 +113,59 @@ class AlmanacService(
             )
         )
     }
+
+    /**
+     * 오늘 + 지난 기록. 화면이 페이지 넘김으로 훑는 목록이다.
+     *
+     * **인덱스 0 이 오늘이고 뒤로 갈수록 과거다.** 화면은 이 순서를 역방향 넘김으로
+     * 표현한다 — 과거를 되돌아 펼치는 방향.
+     *
+     * 오늘 페이지를 못 만들어도 아카이브는 보여준다. 오프라인이어도 어제까지의
+     * 기록은 읽을 수 있어야 한다.
+     */
+    suspend fun pages(
+        language: String = "en",
+        refreshLocation: Boolean = false,
+        archiveLimit: Int = 60,
+    ): PagesState {
+        val today = todaysPage(language, refreshLocation)
+        val year = currentYear(clock)
+
+        val past = content.archivedPages(archiveLimit).map { archived ->
+            TodaysPage(
+                yearsAgo = year - archived.entry.year.toInt(),
+                text = archived.entry.text,
+                author = archived.entry.author,
+                title = archived.entry.title,
+                section = archived.entry.section,
+                year = archived.entry.year.toInt(),
+                weatherGroup = archived.weatherGroup,
+                timeOfDay = archived.timeOfDay,
+                // 기록에는 위치 이름이 없다(좌표 키만 남는다). 화면은 비면 감춘다.
+                locationLabel = "",
+                dateKey = archived.dateKey,
+            )
+        }
+
+        return when (today) {
+            is PageResult.Ready -> {
+                // 오늘 기록은 이미 daily_page 에 저장돼 아카이브 첫 줄과 겹친다. 중복 제거.
+                val withoutToday = past.filterNot {
+                    it.dateKey == today.page.dateKey && it.timeOfDay == today.page.timeOfDay
+                }
+                PagesState.Ready(listOf(today.page) + withoutToday)
+            }
+
+            is PageResult.Unavailable ->
+                if (past.isEmpty()) PagesState.Empty(today.reason) else PagesState.Ready(past)
+        }
+    }
+}
+
+sealed interface PagesState {
+    /** `pages[0]` 이 가장 최신이다. */
+    data class Ready(val pages: List<TodaysPage>) : PagesState
+    data class Empty(val reason: PageUnavailable) : PagesState
 }
 
 private fun ResolvedPage.toTodaysPage(
