@@ -38,7 +38,10 @@ import androidx.compose.ui.unit.sp
 import com.dogdduddy.almanac.location.Cities
 import com.dogdduddy.almanac.location.City
 import com.dogdduddy.almanac.location.LocationMode
+import com.dogdduddy.almanac.resources.Res
+import com.dogdduddy.almanac.resources.crimson_text
 import com.dogdduddy.almanac.weather.MetNorwayClient
+import org.jetbrains.compose.resources.Font
 import kotlin.math.absoluteValue
 
 /** 화면이 그릴 상태. 플랫폼이 조립해서 넣어준다. */
@@ -424,7 +427,14 @@ private fun Centered(text: String) {
     }
 }
 
-private val Serif = FontFamily.Serif
+/**
+ * 본문 서체. Crimson Text (SIL OFL).
+ *
+ * 위젯과 달리 앱 화면은 폰트 제약이 없어 그냥 쓰면 된다.
+ * Android 위젯 히어로가 같은 폰트를 비트맵으로 굽고 있어 네 표면이 통일된다.
+ */
+private val Serif: FontFamily
+    @Composable get() = FontFamily(Font(Res.font.crimson_text))
 private val Paper = Color(0xFFFBF9F4)
 private val Ink = Color(0xFF1A1A1A)
 private val Muted = Color(0xFF8A8378)
