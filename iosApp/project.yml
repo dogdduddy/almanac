@@ -117,6 +117,10 @@ targets:
         CFBundleVersion: "1"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
+        # 번들 폰트 등록. 없으면 .custom(...) 이 **조용히 시스템 폰트로 폴백**한다 —
+        # 에러도 경고도 없어서, 파일만 넣고 여기를 빠뜨리면 원인을 찾기 어렵다.
+        UIAppFonts:
+          - crimson_text.ttf
 
     settings:
       base:

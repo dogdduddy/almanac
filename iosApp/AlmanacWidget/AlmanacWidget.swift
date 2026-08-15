@@ -58,11 +58,14 @@ struct AlmanacWidgetView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if let page = entry.page {
-                // 폰트 확정 전이라 시스템 serif 를 쓴다.
-                // Android 위젯 히어로는 Crimson(비트맵)이므로 지금은 두 플랫폼이 다르다 —
-                // 폰트가 정해지면 여기에 .custom(...) 으로 맞춘다.
+                // 히어로만 Crimson. 본문은 시스템 serif 로 둔다 —
+                // Android 위젯이 (RemoteViews 제약 때문에) 히어로만 비트맵으로 굽고
+                // 나머지는 시스템 serif 이므로, 두 플랫폼 위젯을 같은 위계로 맞춘 것이다.
+                //
+                // 이름은 파일명이 아니라 **PostScript 이름**이어야 한다.
+                // 틀리면 에러 없이 시스템 폰트로 폴백한다.
                 Text("\(page.yearsAgo) years ago")
-                    .font(.system(size: 30, design: .serif))
+                    .font(.custom("CrimsonText-Regular", size: 30))
                     .foregroundStyle(Color.ink)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
