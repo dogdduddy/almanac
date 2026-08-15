@@ -58,9 +58,14 @@ targets:
           Almanac uses your location only to look up today's weather,
           so it can find a passage written about the same sky.
 
+    dependencies:
+      # 앱이 익스텐션을 품는다. XcodeGen 이 embed 빌드 페이즈를 만들어준다.
+      - target: AlmanacWidget
+
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.dogdduddy.almanac
+        CODE_SIGN_ENTITLEMENTS: Almanac/Almanac.entitlements
         FRAMEWORK_SEARCH_PATHS:
           - $(inherited)
           - $(SRCROOT)/../composeApp/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)
@@ -71,9 +76,9 @@ targets:
           # SQLDelight 의 네이티브 드라이버(sqliter)는 시스템 sqlite3 를 호출만 하고
           # 자기가 품고 있지 않다. 이걸 빼면 링크 단계에서 _sqlite3_* 전부 미해결로 터진다.
           - -lsqlite3
-        CODE_SIGNING_ALLOWED: YES
-        CODE_SIGN_IDENTITY: ""
-        CODE_SIGNING_REQUIRED: NO
+        # 서명을 끄면(CODE_SIGNING_REQUIRED: NO) Xcode 가 엔타이틀먼트 처리 단계를
+        # 통째로 건너뛴다. 그러면 App Group 이 안 붙고, 증상은 "컨테이너 조회가 nil" 로
+        # 나타나 DB 가 앱 전용 경로에 생긴다. 시뮬레이터 기본 ad-hoc 서명에 맡긴다.
 
     preBuildScripts:
       - name: Compile Kotlin framework
@@ -82,4 +87,54 @@ targets:
         script: |
           cd "$SRCROOT/.."
           ./gradlew :composeApp:embedAndSignAppleFrameworkForXcode
+        basedOnDependencyAnalysis: false
+
+  AlmanacWidget:
+    type: app-extension
+    platform: iOS
+
+    sources:
+      - path: AlmanacWidget
+        excludes:
+          - "Resources/**"
+      # 위젯은 자기 번들을 본다 (익스텐션의 NSBundle.mainBundle 은 앱 번들이 아니다).
+      # content.db 를 여기에도 넣어야 앱을 한 번도 안 열었어도 위젯이 동작한다.
+      - path: AlmanacWidget/Resources
+        buildPhase: resources
+        optional: true
+
+    info:
+      path: AlmanacWidget/Info.plist
+      properties:
+        CFBundleDisplayName: Almanac
+        # 앱과 버전이 같아야 한다. 다르면 content.db 복사 판단(버전 스탬프)이
+        # 서로 어긋나 앱과 위젯이 번갈아 재복사한다.
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.dogdduddy.almanac.widget
+        CODE_SIGN_ENTITLEMENTS: AlmanacWidget/AlmanacWidget.entitlements
+        # 위젯은 Compose 를 링크하지 않는다 — 익스텐션은 메모리 한도가 빡빡한데
+        # Compose 를 통째로 들고 갈 이유가 없다. 도메인 로직만 있는 AlmanacKit 이면 된다.
+        FRAMEWORK_SEARCH_PATHS:
+          - $(inherited)
+          - $(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)
+        OTHER_LDFLAGS:
+          - $(inherited)
+          - -framework
+          - AlmanacKit
+          - -lsqlite3
+        # 서명을 끄면(CODE_SIGNING_REQUIRED: NO) Xcode 가 엔타이틀먼트 처리 단계를
+        # 통째로 건너뛴다. 그러면 App Group 이 안 붙고, 증상은 "컨테이너 조회가 nil" 로
+        # 나타나 DB 가 앱 전용 경로에 생긴다. 시뮬레이터 기본 ad-hoc 서명에 맡긴다.
+
+    preBuildScripts:
+      - name: Compile Kotlin framework
+        script: |
+          cd "$SRCROOT/.."
+          ./gradlew :shared:embedAndSignAppleFrameworkForXcode
         basedOnDependencyAnalysis: false

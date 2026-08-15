@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  앱과 위젯이 user.db / content.db 를 공유하는 컨테이너.
+	  위젯 타깃의 엔타이틀먼트와 **문자열이 정확히 같아야 한다** — 다르면 위젯이
+	  자기만의 빈 DB 를 보게 되고, 증상은 "위젯만 계속 비어 있음" 으로 나타난다.
+	  shared/DatabaseFactory.ios.kt 의 APP_GROUP 상수와도 일치해야 한다.
+	-->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.com.dogdduddy.almanac</string>
+	</array>
+</dict>
+</plist>

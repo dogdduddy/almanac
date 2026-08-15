@@ -50,12 +50,30 @@ actual class DatabaseFactory {
             },
         )
 
+    /**
+     * DB 를 둘 디렉터리.
+     *
+     * **App Group 컨테이너를 우선한다.** WidgetKit 익스텐션은 앱과 별도 컨테이너를
+     * 쓰므로, 앱 전용 경로에 두면 위젯이 user.db 를 못 읽어 히스토리도 위치도
+     * 보이지 않는다. 날씨 캐시도 두 벌이 되어 1시간 규칙이 사실상 30분이 된다.
+     *
+     * 엔타이틀먼트가 없으면(설정 누락 등) 앱 전용 경로로 떨어진다 — 위젯은 못 쓰지만
+     * 앱은 정상 동작한다. 조용히 죽는 것보다 낫다.
+     */
     private fun databasesDirectory(): String {
-        val library = NSSearchPathForDirectoriesInDomains(
-            NSLibraryDirectory, NSUserDomainMask, true,
-        ).first() as String
-        val dir = "$library/Databases"
-        NSFileManager.defaultManager.createDirectoryAtPath(dir, true, null, null)
+        val manager = NSFileManager.defaultManager
+        val shared = manager
+            .containerURLForSecurityApplicationGroupIdentifier(APP_GROUP)
+            ?.path
+
+        val base = shared ?: (
+            NSSearchPathForDirectoriesInDomains(
+                NSLibraryDirectory, NSUserDomainMask, true,
+            ).first() as String
+            )
+
+        val dir = "$base/Databases"
+        manager.createDirectoryAtPath(dir, true, null, null)
         return dir
     }
 
@@ -68,7 +86,7 @@ actual class DatabaseFactory {
 
     private fun needsRefresh(target: String): Boolean {
         if (!NSFileManager.defaultManager.fileExistsAtPath(target)) return true
-        val stored = NSUserDefaults.standardUserDefaults.stringForKey(VERSION_KEY)
+        val stored = sharedDefaults().stringForKey(VERSION_KEY)
         return stored != versionTag()
     }
 
@@ -83,10 +101,25 @@ actual class DatabaseFactory {
             if (manager.fileExistsAtPath(path)) manager.removeItemAtPath(path, null)
         }
         manager.copyItemAtPath(source, target, null)
-        NSUserDefaults.standardUserDefaults.setObject(versionTag(), VERSION_KEY)
+        sharedDefaults().setObject(versionTag(), VERSION_KEY)
     }
+
+    /**
+     * 버전 스탬프는 **앱과 위젯이 공유해야 한다.**
+     *
+     * standardUserDefaults 는 익스텐션마다 따로라, 그걸 쓰면 앱이 복사한 뒤에도
+     * 위젯은 "아직 복사 안 됐다"고 판단해 매번 다시 복사한다.
+     */
+    private fun sharedDefaults(): NSUserDefaults =
+        NSUserDefaults(suiteName = APP_GROUP) ?: NSUserDefaults.standardUserDefaults
 
     private companion object {
         const val VERSION_KEY = "almanac.content_db_version"
+
+        /**
+         * 앱과 위젯이 공유하는 컨테이너.
+         * Xcode 의 두 타깃 엔타이틀먼트에 **똑같이** 적혀 있어야 한다.
+         */
+        const val APP_GROUP = "group.com.dogdduddy.almanac"
     }
 }
