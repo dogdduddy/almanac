@@ -26,9 +26,15 @@ fun MainViewController(): UIViewController = ComposeUIViewController {
 
     fun load() {
         scope.launch {
+            // 결제 상태를 먼저 맞춘다. 보유 팩이 후보 집합을 바꾸므로 페이지보다 앞서야 한다.
+            IosAlmanacGraph.entitlements.sync()
+            val paywall = IosAlmanacGraph.service.paywall(IosAlmanacGraph.billing)
+
             state = when (val result = IosAlmanacGraph.service.pages(refreshLocation = true)) {
                 is PagesState.Ready ->
-                    AppState.Ready(result.pages, result.locationLabel, result.locationMode)
+                    AppState.Ready(
+                        result.pages, result.locationLabel, result.locationMode, paywall.products,
+                    )
 
                 is PagesState.Empty ->
                     AppState.Empty(result.reason, result.locationLabel, result.locationMode)
@@ -50,6 +56,18 @@ fun MainViewController(): UIViewController = ComposeUIViewController {
             onUseGps = {
                 IosAlmanacGraph.service.useGps()
                 load()
+            },
+            onPurchase = { product ->
+                scope.launch {
+                    IosAlmanacGraph.entitlements.purchase(product)
+                    load()
+                }
+            },
+            onRestore = {
+                scope.launch {
+                    IosAlmanacGraph.entitlements.restore()
+                    load()
+                }
             },
         ),
     )

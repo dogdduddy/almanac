@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.dogdduddy.almanac.billing.BillingProduct
 import com.dogdduddy.almanac.location.Cities
 import com.dogdduddy.almanac.location.City
 import com.dogdduddy.almanac.location.LocationMode
@@ -53,6 +54,8 @@ sealed interface AppState {
         val pages: List<TodaysPage>,
         val locationLabel: String,
         val locationMode: LocationMode,
+        /** 살 수 있는 상품. 비어 있으면 페이월 진입점을 감춘다. */
+        val products: List<BillingProduct> = emptyList(),
     ) : AppState
 
     data class Empty(
@@ -67,9 +70,12 @@ data class AppActions(
     val onAddWidget: (() -> Unit)? = null,
     val onSelectCity: (City) -> Unit = {},
     val onUseGps: () -> Unit = {},
+    val onPurchase: (BillingProduct) -> Unit = {},
+    /** 스토어 정책상 복원은 반드시 제공해야 한다. */
+    val onRestore: () -> Unit = {},
 )
 
-private enum class Screen { PAGES, CITIES, ABOUT }
+private enum class Screen { PAGES, CITIES, ABOUT, PAYWALL }
 
 @Composable
 fun App(state: AppState, actions: AppActions = AppActions()) {
@@ -87,6 +93,13 @@ fun App(state: AppState, actions: AppActions = AppActions()) {
 
                 Screen.ABOUT -> AboutScreen(onBack = { screen = Screen.PAGES })
 
+                Screen.PAYWALL -> PaywallScreen(
+                    products = (state as? AppState.Ready)?.products.orEmpty(),
+                    onPurchase = { actions.onPurchase(it); screen = Screen.PAGES },
+                    onRestore = { actions.onRestore(); screen = Screen.PAGES },
+                    onBack = { screen = Screen.PAGES },
+                )
+
                 Screen.PAGES -> when (state) {
                     is AppState.Loading -> Centered("…")
 
@@ -100,9 +113,11 @@ fun App(state: AppState, actions: AppActions = AppActions()) {
                     is AppState.Ready -> Pages(
                         pages = state.pages,
                         locationLabel = state.locationLabel,
+                        canUpgrade = state.products.isNotEmpty(),
                         actions = actions,
                         onOpenCities = { screen = Screen.CITIES },
                         onOpenAbout = { screen = Screen.ABOUT },
+                        onOpenPaywall = { screen = Screen.PAYWALL },
                     )
                 }
             }
@@ -118,9 +133,11 @@ fun App(state: AppState, actions: AppActions = AppActions()) {
 private fun Pages(
     pages: List<TodaysPage>,
     locationLabel: String,
+    canUpgrade: Boolean,
     actions: AppActions,
     onOpenCities: () -> Unit,
     onOpenAbout: () -> Unit,
+    onOpenPaywall: () -> Unit,
 ) {
     val pagerState = rememberPagerState(pageCount = { pages.size })
 
@@ -140,9 +157,11 @@ private fun Pages(
                 page = pages[index],
                 isToday = index == 0,
                 locationLabel = locationLabel,
+                canUpgrade = canUpgrade,
                 actions = if (index == 0) actions else AppActions(),
                 onOpenCities = onOpenCities,
                 onOpenAbout = onOpenAbout,
+                onOpenPaywall = onOpenPaywall,
             )
         }
     }
@@ -184,9 +203,11 @@ private fun PageBody(
     page: TodaysPage,
     isToday: Boolean,
     locationLabel: String,
+    canUpgrade: Boolean,
     actions: AppActions,
     onOpenCities: () -> Unit,
     onOpenAbout: () -> Unit,
+    onOpenPaywall: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -222,9 +243,11 @@ private fun PageBody(
         if (isToday) {
             Footer(
                 locationLabel = locationLabel,
+                canUpgrade = canUpgrade,
                 actions = actions,
                 onOpenCities = onOpenCities,
                 onOpenAbout = onOpenAbout,
+                onOpenPaywall = onOpenPaywall,
             )
         }
     }
@@ -233,9 +256,11 @@ private fun PageBody(
 @Composable
 private fun Footer(
     locationLabel: String,
+    canUpgrade: Boolean,
     actions: AppActions,
     onOpenCities: () -> Unit,
     onOpenAbout: () -> Unit,
+    onOpenPaywall: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(top = 44.dp),
@@ -245,6 +270,8 @@ private fun Footer(
         // 위치는 곧 "어디의 하늘인가" 라서 화면에 남기고, 누르면 바꿀 수 있게 한다.
         FooterLink(locationLabel.ifBlank { "Choose a place" }, onOpenCities)
         actions.onAddWidget?.let { FooterLink("Widget", it) }
+        // 살 수 있을 때만 보인다. 이미 다 가진 유저에게 파는 화면을 띄우지 않는다.
+        if (canUpgrade) FooterLink("The shelf", onOpenPaywall)
         FooterLink("About", onOpenAbout)
     }
 }
@@ -438,3 +465,84 @@ private val Serif: FontFamily
 private val Paper = Color(0xFFFBF9F4)
 private val Ink = Color(0xFF1A1A1A)
 private val Muted = Color(0xFF8A8378)
+
+// ---------------------------------------------------------------------------
+// 페이월
+// ---------------------------------------------------------------------------
+
+/**
+ * 유료 전환 화면.
+ *
+ * 파는 것은 **기능이 아니라 서가의 크기**다. 무료 유저도 위젯을 포함해 앱 전체를
+ * 쓰고, 다만 문장이 적어 같은 것을 다시 만나게 된다. 그 반복이 전환 동기이므로
+ * 여기서 다시 설득할 필요가 없다 — 조용히 무엇을 얻는지만 적는다.
+ *
+ * **기간을 약속하지 않는다.** "한 달 분량" 같은 문구는 날씨가 단조로운 지역
+ * 유저에게 배신이 된다 (같은 값을 내고 2주 만에 소진한다).
+ * 검증 가능한 것(컬렉션의 크기)만 말한다.
+ */
+@Composable
+private fun PaywallScreen(
+    products: List<BillingProduct>,
+    onPurchase: (BillingProduct) -> Unit,
+    onRestore: () -> Unit,
+    onBack: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 28.dp),
+    ) {
+        ScreenHeader("The shelf", onBack)
+
+        Section(
+            "What you have",
+            "A starter shelf. Every weather is covered, so the app always has " +
+                "something to show you — but the shelf is small, and you will " +
+                "start meeting the same passages again.",
+        )
+
+        if (products.isEmpty()) {
+            // 결제 미설정·오프라인. 깨진 화면 대신 사실만 적는다.
+            Section(
+                "Not available right now",
+                "The store could not be reached. Your free passages are unaffected.",
+            )
+        } else {
+            products.forEach { product ->
+                Column(modifier = Modifier.padding(bottom = 28.dp)) {
+                    Text(product.title, fontSize = 20.sp, fontFamily = Serif, color = Ink)
+                    Text(
+                        product.description,
+                        fontSize = 15.sp,
+                        lineHeight = 24.sp,
+                        fontFamily = Serif,
+                        color = Ink,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+                    Text(
+                        text = product.displayPrice?.let { "$it · one time" } ?: "one time",
+                        fontSize = 13.sp,
+                        fontFamily = Serif,
+                        color = Muted,
+                        modifier = Modifier
+                            .padding(top = 14.dp)
+                            .clickable { onPurchase(product) },
+                    )
+                }
+            }
+        }
+
+        // 스토어 정책상 반드시 있어야 한다. 기기를 바꾼 유저의 유일한 출구이기도 하다.
+        Text(
+            text = "Restore a previous purchase",
+            fontSize = 13.sp,
+            fontFamily = Serif,
+            color = Muted,
+            modifier = Modifier
+                .padding(top = 8.dp, bottom = 48.dp)
+                .clickable(onClick = onRestore),
+        )
+    }
+}

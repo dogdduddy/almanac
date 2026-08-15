@@ -60,3 +60,32 @@ object NoBilling : Billing {
         PurchaseOutcome.Failed("billing not configured")
     override suspend fun restore(): Set<String> = emptySet()
 }
+
+/**
+ * **표시 전용** 구현. RevenueCat 키가 생기기 전까지 쓴다.
+ *
+ * 상품 정보는 돌려주되 [purchase] 는 항상 실패한다 — 실제 결제 없이 팩이 지급되면
+ * 그게 더 나쁜 버그다. 페이월 화면을 만들고 데모하는 데는 이걸로 충분하다.
+ *
+ * 가격은 원래 스토어가 알려준다. 여기서는 null 이라 화면이 "one time" 만 보여준다.
+ *
+ * 키가 생기면 `RevenueCatBilling` 으로 교체한다 —
+ * 자세한 절차는 docs/decisions/revenuecat-integration.md 참고.
+ */
+object PreviewBilling : Billing {
+
+    private val fullCollection = BillingProduct(
+        packId = "core-2026",
+        productId = "com.dogdduddy.almanac.core2026",
+        title = "The 2026 Collection",
+        description = "Every passage collected so far, in every weather. " +
+            "One purchase, no subscription.",
+        displayPrice = null,
+    )
+
+    override suspend fun products() = listOf(fullCollection)
+    override suspend fun entitledPackIds(): Set<String> = emptySet()
+    override suspend fun purchase(product: BillingProduct) =
+        PurchaseOutcome.Failed("billing not configured yet")
+    override suspend fun restore(): Set<String> = emptySet()
+}

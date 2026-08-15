@@ -1,6 +1,9 @@
 package com.dogdduddy.almanac
 
 import android.content.Context
+import com.dogdduddy.almanac.billing.Billing
+import com.dogdduddy.almanac.billing.EntitlementSync
+import com.dogdduddy.almanac.billing.PreviewBilling
 import com.dogdduddy.almanac.data.AlmanacRepository
 import com.dogdduddy.almanac.data.DatabaseFactory
 import com.dogdduddy.almanac.db.content.ContentDatabase
@@ -26,6 +29,20 @@ object AlmanacGraph {
     @Volatile
     private var service: AlmanacService? = null
 
+    @Volatile
+    private var syncRef: EntitlementSync? = null
+
+    /**
+     * 결제 백엔드. 키가 없어 아직 표시 전용이다.
+     * RevenueCat 키가 생기면 여기만 RevenueCatBilling 으로 바꾸면 된다.
+     */
+    val billing: Billing get() = PreviewBilling
+
+    fun entitlements(context: Context): EntitlementSync {
+        service(context)
+        return checkNotNull(syncRef)
+    }
+
     fun service(context: Context): AlmanacService =
         service ?: synchronized(this) {
             service ?: build(context.applicationContext).also { service = it }
@@ -38,8 +55,11 @@ object AlmanacGraph {
         val user = UserDatabase(factory.createUserDriver())
         val content = ContentDatabase(factory.createContentDriver())
 
+        val repository = AlmanacRepository(content, user) { clock.nowEpochSeconds() }
+        syncRef = EntitlementSync(repository, billing)
+
         return AlmanacService(
-            content = AlmanacRepository(content, user) { clock.nowEpochSeconds() },
+            content = repository,
             weather = WeatherRepository(
                 user = user,
                 source = createMetNorwayClient { clock.nowEpochSeconds() },

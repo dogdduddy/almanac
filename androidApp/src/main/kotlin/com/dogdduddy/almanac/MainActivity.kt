@@ -42,6 +42,19 @@ class MainActivity : ComponentActivity() {
                         AlmanacGraph.service(this).useGps()
                         load()
                     },
+                    onPurchase = { product ->
+                        lifecycleScope.launch {
+                            AlmanacGraph.entitlements(this@MainActivity).purchase(product)
+                            // 성공이든 실패든 다시 그린다 — 보유 팩이 바뀌면 문장도 바뀐다.
+                            load()
+                        }
+                    },
+                    onRestore = {
+                        lifecycleScope.launch {
+                            AlmanacGraph.entitlements(this@MainActivity).restore()
+                            load()
+                        }
+                    },
                 ),
             )
         }
@@ -57,10 +70,16 @@ class MainActivity : ComponentActivity() {
     private fun load() {
         lifecycleScope.launch {
             // 앱에서는 측위를 시도한다. 위젯과 달리 사용자를 잠시 기다리게 할 수 있다.
-            state = when (val result = AlmanacGraph.service(this@MainActivity)
-                .pages(refreshLocation = true)) {
+            val service = AlmanacGraph.service(this@MainActivity)
+            // 결제 상태를 먼저 맞춘다. 보유 팩이 후보 집합을 바꾸므로 페이지보다 앞서야 한다.
+            AlmanacGraph.entitlements(this@MainActivity).sync()
+            val paywall = service.paywall(AlmanacGraph.billing)
+
+            state = when (val result = service.pages(refreshLocation = true)) {
                 is PagesState.Ready ->
-                    AppState.Ready(result.pages, result.locationLabel, result.locationMode)
+                    AppState.Ready(
+                        result.pages, result.locationLabel, result.locationMode, paywall.products,
+                    )
 
                 is PagesState.Empty ->
                     AppState.Empty(result.reason, result.locationLabel, result.locationMode)

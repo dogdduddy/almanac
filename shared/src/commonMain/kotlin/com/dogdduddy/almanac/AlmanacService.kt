@@ -1,6 +1,8 @@
 package com.dogdduddy.almanac
 
 import com.dogdduddy.almanac.core.TimeOfDay
+import com.dogdduddy.almanac.billing.Billing
+import com.dogdduddy.almanac.billing.BillingProduct
 import com.dogdduddy.almanac.core.WeatherGroup
 import com.dogdduddy.almanac.data.AlmanacRepository
 import com.dogdduddy.almanac.data.ResolvedPage
@@ -169,6 +171,21 @@ class AlmanacService(
         }
     }
 
+    // ---- 판매 -----------------------------------------------------------------
+
+    /**
+     * 페이월에 필요한 정보.
+     *
+     * 팔 것이 없으면(전부 보유했거나 결제 미설정) `canUpgrade = false` 이고
+     * 화면은 진입점 자체를 감춘다 — 살 수 없는 버튼을 두지 않는다.
+     */
+    suspend fun paywall(billing: Billing): PaywallInfo {
+        val owned = content.ownedPackIds().toSet()
+        val products = runCatching { billing.products() }.getOrElse { emptyList() }
+            .filterNot { it.packId in owned }
+        return PaywallInfo(products = products, canUpgrade = products.isNotEmpty())
+    }
+
     // ---- 위치 선택 -----------------------------------------------------------
 
     fun currentPlace(): ResolvedLocation = location.current()
@@ -179,6 +196,12 @@ class AlmanacService(
     /** 수동 선택을 풀고 GPS 로 되돌린다. */
     fun useGps(): ResolvedLocation = location.useGps()
 }
+
+/** 페이월 진입 여부와 살 수 있는 상품. */
+data class PaywallInfo(
+    val products: List<BillingProduct>,
+    val canUpgrade: Boolean,
+)
 
 sealed interface PagesState {
     /** `pages[0]` 이 가장 최신이다. */
