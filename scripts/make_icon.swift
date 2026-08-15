@@ -44,15 +44,7 @@ func renderIcon(size: CGFloat) -> CGImage? {
     ctx.setFillColor(paper)
     ctx.fill(CGRect(x: 0, y: 0, width: size, height: size))
 
-    // 지평선이자 본문 첫 줄. 글자 바로 아래에 붙여 하나의 덩어리로 읽히게 한다.
-    // 멀면 아이콘이 위아래로 갈라져 작은 크기에서 지저분해진다.
-    ctx.setStrokeColor(ink.copy(alpha: 0.30)!)
-    ctx.setLineWidth(size * 0.010)
-    ctx.move(to: CGPoint(x: size * 0.26, y: size * 0.245))
-    ctx.addLine(to: CGPoint(x: size * 0.74, y: size * 0.245))
-    ctx.strokePath()
-
-    guard let font = loadFont(size: size * 0.70) else { return nil }
+    guard let font = loadFont(size: size * 0.80) else { return nil }
 
     // AppKit/UIKit 을 안 쓰므로 NSAttributedString.Key 대신 CoreText 키를 직접 쓴다.
     let attrs: CFDictionary = [
@@ -64,11 +56,29 @@ func renderIcon(size: CGFloat) -> CGImage? {
         return nil
     }
     let line = CTLineCreateWithAttributedString(attributed)
-    let bounds = CTLineGetBoundsWithOptions(line, .useGlyphPathBounds)
+    let glyph = CTLineGetBoundsWithOptions(line, .useGlyphPathBounds)
+
+    // 지평선이자 본문 첫 줄. 글자 폭보다 조금 넓게 잡아 글자를 받치는 모양이 되게 한다.
+    let ruleWidth = glyph.width * 1.22
+    let gap = size * 0.048
+
+    // **광학 중심을 맞춘다.** 글자 높이 + 간격 + 선을 한 덩어리로 보고 그 덩어리를
+    // 아이콘 중앙에 놓는다. 글자만 기준으로 잡으면 아래에 큰 여백이 남는다.
+    let blockHeight = glyph.height + gap
+    let blockBottom = (size - blockHeight) / 2
+    let baseline = blockBottom + gap
+
+    // 선 두께에 하한을 둔다. 비율로만 잡으면 48px 아이콘에서 1px 미만이 되어
+    // 렌더러가 지워버린다 — 큰 크기에서만 보이는 요소는 아이콘에 두면 안 된다.
+    ctx.setStrokeColor(ink.copy(alpha: 0.40)!)
+    ctx.setLineWidth(max(1, size * 0.016))
+    ctx.move(to: CGPoint(x: (size - ruleWidth) / 2, y: blockBottom))
+    ctx.addLine(to: CGPoint(x: (size + ruleWidth) / 2, y: blockBottom))
+    ctx.strokePath()
 
     ctx.textPosition = CGPoint(
-        x: (size - bounds.width) / 2 - bounds.minX,
-        y: size * 0.345 - bounds.minY
+        x: (size - glyph.width) / 2 - glyph.minX,
+        y: baseline - glyph.minY
     )
     CTLineDraw(line, ctx)
 
