@@ -62,6 +62,12 @@ class AlmanacRepository(
 
     fun ownedPackIds(): List<String> = userQueries.ownedPackIds().executeAsList()
 
+    /** 설치 시 자동 지급되는(=무료) 팩. 결제 동기화에서 회수 대상이 되면 안 된다. */
+    fun autoGrantPackIds(): List<String> = contentQueries.autoGrantPackIds().executeAsList()
+
+    /** 환불·기기 변경 등으로 결제가 사라졌을 때 회수한다. */
+    fun revokePack(packId: String) = userQueries.revokePack(packId)
+
     fun grantPack(packId: String, source: PackSource) {
         userQueries.grantPack(packId, nowEpochSeconds(), source.wire)
     }

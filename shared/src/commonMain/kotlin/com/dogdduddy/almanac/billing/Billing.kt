@@ -1,0 +1,62 @@
+package com.dogdduddy.almanac.billing
+
+/**
+ * 구매 가능한 상품. 팩 하나에 상품 하나가 대응한다.
+ *
+ * @param packId content.db 의 packs.id. 결제가 확인되면 이 팩을 지급한다
+ * @param productId 스토어 상품 ID (App Store / Play Console 에 같은 값으로 등록)
+ */
+data class BillingProduct(
+    val packId: String,
+    val productId: String,
+    val title: String,
+    val description: String,
+    /** 스토어가 알려준 현지 통화 표시 가격. 없으면 아직 못 받아온 것. */
+    val displayPrice: String?,
+)
+
+sealed interface PurchaseOutcome {
+    data class Purchased(val packIds: Set<String>) : PurchaseOutcome
+    data object Cancelled : PurchaseOutcome
+    data class Failed(val message: String) : PurchaseOutcome
+}
+
+/**
+ * 결제 백엔드.
+ *
+ * 구현은 RevenueCat 하나지만 인터페이스로 끊는다.
+ * - 결제 SDK 없이 엔티틀먼트 동기화 로직을 테스트할 수 있어야 한다
+ * - 키가 없는 개발/CI 환경에서도 앱이 돌아야 한다 ([NoBilling])
+ */
+interface Billing {
+
+    /** 판매 중인 상품. 스토어 조회에 실패하면 빈 목록 — 화면은 페이월을 감춘다. */
+    suspend fun products(): List<BillingProduct>
+
+    /**
+     * 현재 보유 중인 팩 id.
+     *
+     * **RevenueCat 이 진실의 원천이고 user.db 는 캐시다.** 기기를 바꾸거나
+     * 환불이 나면 여기 결과가 바뀌므로, 앱 시작 시마다 이걸로 맞춘다.
+     */
+    suspend fun entitledPackIds(): Set<String>
+
+    suspend fun purchase(product: BillingProduct): PurchaseOutcome
+
+    /** 기기 변경·재설치 복원. 스토어 정책상 반드시 제공해야 한다. */
+    suspend fun restore(): Set<String>
+}
+
+/**
+ * 결제가 설정되지 않았을 때 쓰는 구현.
+ *
+ * 키가 없다고 앱이 죽거나 페이월이 깨지면 안 된다 — 무료 콘텐츠는 그대로 돌아야 한다.
+ * 개발 중과 CI 에서 쓰인다.
+ */
+object NoBilling : Billing {
+    override suspend fun products(): List<BillingProduct> = emptyList()
+    override suspend fun entitledPackIds(): Set<String> = emptySet()
+    override suspend fun purchase(product: BillingProduct) =
+        PurchaseOutcome.Failed("billing not configured")
+    override suspend fun restore(): Set<String> = emptySet()
+}
