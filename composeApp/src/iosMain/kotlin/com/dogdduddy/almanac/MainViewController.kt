@@ -19,7 +19,8 @@ import platform.UIKit.UIViewController
  * 화면 자체(App)는 Android 와 **완전히 같은 코드**다. 플랫폼이 다른 건
  * 여기 조립 부분뿐이다 — 심사 기준의 '일관성'이 여기서 나온다.
  *
- * 위치 권한 요청은 iOS 가 CLLocationManager 접근 시점에 알아서 띄운다.
+ * 위치 권한 프롬프트는 첫 위치 갱신(IosLocationSource)이 직접 띄운다 —
+ * iOS 는 매니저를 만들었다고 알아서 물어보지 않는다.
  */
 fun MainViewController(): UIViewController = ComposeUIViewController {
     var state by remember { mutableStateOf<AppState>(AppState.Loading) }
