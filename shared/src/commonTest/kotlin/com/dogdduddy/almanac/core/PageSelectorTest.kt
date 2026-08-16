@@ -86,6 +86,62 @@ class PageSelectorTest {
         assertEquals(candidates.toSet(), counts.keys)
     }
 
+    // ---- 균등 노출 -------------------------------------------------------------
+
+    /** 카운트가 없으면 예전과 똑같이 동작해야 한다. 회귀 방지. */
+    @Test
+    fun emptyReadCountsChangeNothing() {
+        assertEquals(
+            PageSelector.select(request, candidates),
+            PageSelector.select(request, candidates, readCounts = emptyMap()),
+        )
+    }
+
+    /**
+     * 적게 읽은 것만 후보로 남는다.
+     *
+     * 시드만으로 고르면 무작위 인덱싱이라 장기적으로 편중된다 —
+     * 실제 콘텐츠 1년 시뮬레이션에서 428편 중 111편이 한 번도 안 나왔다.
+     */
+    @Test
+    fun onlyTheLeastReadEntriesStayInThePool() {
+        val counts = mapOf(101L to 3, 102L to 0, 103L to 3, 104L to 0, 105L to 3)
+        for (day in 1..28) {
+            val selection = PageSelector.select(
+                request.copy(dateKey = "2026-09-" + day.toString().padStart(2, '0')),
+                candidates,
+                readCounts = counts,
+            )
+            assertNotNull(selection)
+            assertTrue(selection.entryId in setOf(102L, 104L), "많이 읽은 문장이 뽑혔다: $selection")
+        }
+    }
+
+    /** 최소 집합 안에서는 여전히 시드로 고른다 — 결정론이 유지되어야 한다. */
+    @Test
+    fun readCountsDoNotBreakDeterminism() {
+        val counts = mapOf(101L to 1, 102L to 0, 103L to 0, 104L to 2, 105L to 0)
+        val first = PageSelector.select(request, candidates, readCounts = counts)
+        assertNotNull(first)
+        repeat(20) {
+            assertEquals(first, PageSelector.select(request, candidates.shuffled(), readCounts = counts))
+        }
+    }
+
+    /** 히스토리 회피가 먼저다. 최근에 나온 것은 덜 읽었더라도 바로 다시 나오지 않는다. */
+    @Test
+    fun recentAvoidanceIsAppliedBeforeReadCounts() {
+        val counts = mapOf(101L to 0, 102L to 5, 103L to 5, 104L to 5, 105L to 5)
+        val selection = PageSelector.select(
+            request,
+            candidates,
+            recentlyShownIds = listOf(101L),
+            readCounts = counts,
+        )
+        assertNotNull(selection)
+        assertTrue(selection.entryId != 101L, "직전에 나온 문장이 '덜 읽음'을 이유로 다시 나왔다")
+    }
+
     @Test
     fun selectDayHasNoDuplicatesWithinTheDay() {
         val group = WeatherGroup.RAIN

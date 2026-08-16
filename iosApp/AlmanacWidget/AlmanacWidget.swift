@@ -40,9 +40,12 @@ struct Provider: TimelineProvider {
     /// 위젯은 측위를 기다릴 수 없으므로 저장된 위치만 쓴다 (`refreshLocation: false`).
     private func loadPage() async -> TodaysPage? {
         do {
+            // countAsRead: false — 위젯은 슬롯 고정에는 참여하되 소비로는 세지 않는다.
+            // 위젯 갱신을 읽음으로 세면 주머니 속에서 콘텐츠가 소진된다.
             let result = try await IosAlmanacGraph.shared.service.todaysPage(
                 language: "en",
-                refreshLocation: false
+                refreshLocation: false,
+                countAsRead: false
             )
             return (result as? PageResultReady)?.page
         } catch {

@@ -131,6 +131,7 @@ class AlmanacRepositoryTest {
         timeOfDay: TimeOfDay = TimeOfDay.MORNING,
         group: WeatherGroup = WeatherGroup.RAIN,
         record: Boolean = true,
+        countAsRead: Boolean = false,
     ) = repo.resolvePage(
         dateKey = dateKey,
         timeOfDay = timeOfDay,
@@ -140,6 +141,7 @@ class AlmanacRepositoryTest {
         windFlag = false,
         installId = installId,
         record = record,
+        countAsRead = countAsRead,
     )
 
     // ---- 설치 ID -----------------------------------------------------------
@@ -385,6 +387,81 @@ class AlmanacRepositoryTest {
         }
         // 버킷당 3개뿐이므로 3일이면 셋 다 나와야 한다 (히스토리 회피가 동작한다는 증거).
         assertEquals(3, seen.size, "히스토리 회피가 동작하면 3일 안에 3개가 모두 소진된다")
+    }
+
+    // ---- 읽음 집계 -----------------------------------------------------------
+
+    /**
+     * 위젯이 그린 것은 소비가 아니다.
+     *
+     * 위젯은 슬롯 고정에는 참여해야 하고(그래야 앱과 같은 문장을 그린다) 소비로는
+     * 세면 안 된다. 둘을 한 값으로 묶으면 주머니 속에서 하루 3편씩 사라진다.
+     */
+    @Test
+    fun widgetRenderPinsTheSlotButIsNotCountedAsRead() {
+        repo.ensureBaseEntitlement()
+
+        val fromWidget = resolve(countAsRead = false)
+        assertNotNull(fromWidget)
+        assertEquals(emptyMap(), repo.readCounts(), "위젯 갱신이 읽음으로 잡혔다")
+
+        // 앱이 같은 슬롯을 열면 같은 문장이 나오고, 그때 비로소 읽음이 된다.
+        val fromApp = resolve(countAsRead = true)
+        assertEquals(fromWidget.entry.id, fromApp?.entry?.id, "위젯과 앱이 다른 문장을 봤다")
+        assertEquals(mapOf(fromWidget.entry.id to 1), repo.readCounts())
+    }
+
+    /** 앱을 하루에 열 번 열어도 그 문장을 열 번 읽은 것은 아니다. */
+    @Test
+    fun reopeningTheAppInTheSameSlotCountsOnce() {
+        repo.ensureBaseEntitlement()
+        val page = resolve(countAsRead = true)
+        assertNotNull(page)
+        repeat(5) {
+            now += 600
+            resolve(countAsRead = true)
+        }
+        assertEquals(mapOf(page.entry.id to 1), repo.readCounts())
+    }
+
+    /** 날씨가 바뀌어 문장이 교체되면 읽음도 그 문장을 따라간다. */
+    @Test
+    fun replacingTheSlotMovesTheReadToTheNewEntry() {
+        repo.ensureBaseEntitlement()
+        val rain = resolve(group = WeatherGroup.RAIN, countAsRead = true)
+        assertNotNull(rain)
+        assertEquals(mapOf(rain.entry.id to 1), repo.readCounts())
+
+        now += 3_600
+        val clear = resolve(group = WeatherGroup.CLEAR, countAsRead = true)
+        assertNotNull(clear)
+        assertEquals(mapOf(clear.entry.id to 1), repo.readCounts(), "교체된 슬롯의 읽음이 남아 있다")
+    }
+
+    /**
+     * 읽은 것이 적은 문장이 먼저 나온다.
+     *
+     * 시드만으로 고르면 무작위 인덱싱이라 장기적으로 편중된다.
+     * 실제 콘텐츠 1년 시뮬레이션에서 428편 중 111편이 한 번도 안 나왔다.
+     */
+    @Test
+    fun selectionPrefersEntriesTheUserHasReadLeast() {
+        repo.ensureBaseEntitlement()
+        // 버킷당 3개뿐이라 3일이면 한 바퀴 돈다.
+        val firstRound = (1..3).map { day ->
+            now += 86_400
+            resolve(dateKey = "2026-08-0$day", countAsRead = true)?.entry?.id
+        }
+        assertEquals(3, firstRound.toSet().size, "한 바퀴에서 3개가 모두 나와야 한다")
+        assertEquals(setOf(1), repo.readCounts().values.toSet(), "모두 한 번씩 읽혀야 한다")
+
+        // 두 바퀴째도 특정 문장에 쏠리지 않는다.
+        val secondRound = (4..6).map { day ->
+            now += 86_400
+            resolve(dateKey = "2026-08-0$day", countAsRead = true)?.entry?.id
+        }
+        assertEquals(3, secondRound.toSet().size)
+        assertEquals(setOf(2), repo.readCounts().values.toSet(), "한쪽만 두 번 읽히면 편중이다")
     }
 
     @Test

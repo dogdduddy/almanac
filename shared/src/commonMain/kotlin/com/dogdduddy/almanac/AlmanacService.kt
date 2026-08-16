@@ -91,10 +91,14 @@ class AlmanacService(
     /**
      * @param refreshLocation 앱에서는 true, **위젯에서는 false**.
      *   위젯은 측위를 기다릴 수 없으므로 저장된 위치만 쓴다.
+     * @param countAsRead 앱 화면에서는 true, **위젯에서는 false**.
+     *   위젯은 슬롯 고정에는 참여하되(그래야 앱과 같은 문장을 그린다) 소비로는 세지 않는다.
+     *   위젯 갱신을 읽음으로 세면 주머니 속에서 하루 3편씩 콘텐츠가 사라진다.
      */
     suspend fun todaysPage(
         language: String = "en",
         refreshLocation: Boolean = false,
+        countAsRead: Boolean = false,
     ): PageResult {
         content.ensureBaseEntitlement()
 
@@ -114,6 +118,7 @@ class AlmanacService(
             locationKey = conditions.locationKey,
             windFlag = conditions.windFlag,
             installId = installId,
+            countAsRead = countAsRead,
         ) ?: return PageResult.Unavailable(PageUnavailable.NO_CONTENT)
 
         return PageResult.Ready(
@@ -140,8 +145,10 @@ class AlmanacService(
         language: String = "en",
         refreshLocation: Boolean = false,
         archiveLimit: Int = 60,
+        countAsRead: Boolean = true,
     ): PagesState {
-        val today = todaysPage(language, refreshLocation)
+        // pages() 는 앱 화면 전용이다(위젯은 todaysPage 만 쓴다). 그래서 기본이 true 다.
+        val today = todaysPage(language, refreshLocation, countAsRead)
         val year = currentYear(clock)
 
         val past = content.archivedPages(archiveLimit).map { archived ->

@@ -110,6 +110,8 @@ class AlmanacRepository(
      * 비가 그친 뒤에도 비 이야기를 계속 보여줄 이유가 없다.
      *
      * @param record true 면 daily_page 에 기록한다. 위젯 미리보기 등에서는 false.
+     * @param countAsRead **앱 화면**이 그리는 경우에만 true. 위젯은 false.
+     *   위젯 갱신까지 읽음으로 세면 주머니 속에서 콘텐츠가 소진된다.
      */
     fun resolvePage(
         dateKey: String,
@@ -121,13 +123,18 @@ class AlmanacRepository(
         installId: String,
         historyWindow: Int = PageSelector.DEFAULT_HISTORY_WINDOW,
         record: Boolean = true,
+        countAsRead: Boolean = false,
     ): ResolvedPage? {
         val owned = ownedPackIds()
         if (owned.isEmpty()) return null
 
         val request = PageRequest(dateKey, timeOfDay, weatherGroup, installId)
 
-        recordedPage(request, locationKey)?.let { return it }
+        recordedPage(request, locationKey)?.let {
+            // 고정된 슬롯을 그대로 돌려주더라도, 앱이 그린 것이면 읽음은 남긴다.
+            if (record && countAsRead) markRead(dateKey, timeOfDay, locationKey)
+            return it
+        }
 
         val candidates = contentQueries
             .candidateIdsForBucket(language, weatherGroup.key, timeOfDay.key, owned)
@@ -140,6 +147,7 @@ class AlmanacRepository(
                 .recentEntryIdsExcludingSlot(dateKey, timeOfDay.key, locationKey, historyWindow.toLong())
                 .executeAsList(),
             historyWindow = historyWindow,
+            readCounts = readCounts(),
         ) ?: return null
 
         val entry = contentQueries.entryById(selection.entryId).executeAsOneOrNull() ?: return null
@@ -154,8 +162,28 @@ class AlmanacRepository(
                 wind_flag = if (windFlag) 1L else 0L,
                 shown_at = nowEpochSeconds(),
             )
+            if (countAsRead) markRead(dateKey, timeOfDay, locationKey)
         }
         return ResolvedPage(entry, selection.bucket, selection.seed)
+    }
+
+    /**
+     * 유저가 앱에서 읽은 횟수. 위젯이 그린 것은 세지 않는다.
+     *
+     * 이게 균등 노출의 입력이다 — 시드만으로 고르면 무작위 인덱싱이라
+     * 장기적으로 특정 문장에 쏠리고 나머지는 영영 안 나온다.
+     */
+    fun readCounts(): Map<Long, Int> =
+        userQueries.readCounts().executeAsList().associate { it.entry_id to it.read_count.toInt() }
+
+    /** 이미 읽은 슬롯이면 시각을 덮지 않는다 — 앱을 다시 열었다고 다시 읽은 것은 아니다. */
+    private fun markRead(dateKey: String, timeOfDay: TimeOfDay, locationKey: String) {
+        userQueries.markSlotRead(
+            readAt = nowEpochSeconds(),
+            date = dateKey,
+            timeOfDay = timeOfDay.key,
+            locationKey = locationKey,
+        )
     }
 
     /**

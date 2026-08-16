@@ -59,8 +59,18 @@ object PageSelector {
     /**
      * 한 버킷에서 문장 하나를 고른다.
      *
+     * 두 단계로 좁힌 뒤 시드로 고른다.
+     * 1. **최근 회피** — 직전에 나온 것을 뺀다. 짧은 주기의 반복을 막는다
+     * 2. **균등 노출** — 남은 것 중 읽은 횟수가 가장 적은 것들만 남긴다
+     *
+     * 2번이 없으면 시드가 무작위 인덱싱이라 장기적으로 편중된다. 실제 콘텐츠로
+     * 1년을 돌려보면 428편 중 111편이 한 번도 안 나왔다. 최소 횟수 집합으로
+     * 좁힌 뒤 **그 안에서 다시 시드로** 고르므로 결정론은 그대로다 —
+     * 같은 조건 + 같은 user.db 면 앱과 위젯이 여전히 같은 문장을 낸다.
+     *
      * @param candidateIds content.db 에서 가져온 해당 버킷의 entry id 들
      * @param recentlyShownIds user.db 히스토리. **최신순**으로 정렬되어 있어야 한다
+     * @param readCounts 문장별로 유저가 **앱에서 읽은** 횟수. 없는 id 는 0 으로 본다
      * @return 후보가 비어 있으면 null
      */
     fun select(
@@ -68,6 +78,7 @@ object PageSelector {
         candidateIds: List<Long>,
         recentlyShownIds: List<Long> = emptyList(),
         historyWindow: Int = DEFAULT_HISTORY_WINDOW,
+        readCounts: Map<Long, Int> = emptyMap(),
     ): PageSelection? {
         val ordered = candidateIds.distinct().sorted()
         if (ordered.isEmpty()) return null
@@ -84,7 +95,12 @@ object PageSelector {
             .take(minOf(historyWindow, ordered.size - 1))
             .toHashSet()
 
-        val pool = ordered.filterNot { it in excluded }
+        val recent = ordered.filterNot { it in excluded }
+
+        // 최소 횟수 집합. readCounts 가 비면 전부 0 이라 recent 그대로가 된다.
+        val fewest = recent.minOf { readCounts[it] ?: 0 }
+        val pool = recent.filter { (readCounts[it] ?: 0) == fewest }
+
         val index = (seed % pool.size.toULong()).toInt()
         return PageSelection(pool[index], request.bucket, seed)
     }
