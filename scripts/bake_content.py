@@ -61,6 +61,8 @@ KEEP_FALSE = {"", "0", "n", "no", "false", "x", "drop", "-"}
 # DB 에 싣지 않는 큐레이션 작업용 컬럼. 여기 없는 새 컬럼이 나오면 경고한다.
 PROCESS_ONLY_COLUMNS = {
     "keep", "note", "time_reason", "auto_flag", "bucket_suggest", "heuristic_rank",
+    # 검수 추적용. 원문 행을 되짚을 때 필요하므로 CSV 에는 남기고 DB 에는 싣지 않는다.
+    "review_id", "orig_bucket",
     "bucket", "bucket_all", "excerpt_ko", "weather_word", "weather_phrase",
     "weather_state", "weather_rule", "weather_specificity", "word_position",
     "position_ok", "proper_noun_count", "person_marker", "voice", "person_ref",
