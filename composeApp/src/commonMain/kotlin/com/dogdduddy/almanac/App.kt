@@ -155,7 +155,9 @@ private fun Pages(
         ) {
             PageBody(
                 page = pages[index],
-                isToday = index == 0,
+                // 푸터는 '맨 앞 페이지'의 것이다. 오늘 페이지가 없어도 도시 선택·구매
+                // 진입점은 있어야 하므로 page.isToday 가 아니라 위치로 판단한다.
+                isCurrent = index == 0,
                 locationLabel = locationLabel,
                 canUpgrade = canUpgrade,
                 actions = if (index == 0) actions else AppActions(),
@@ -201,7 +203,7 @@ private fun Modifier.pageTurn(pagerState: PagerState, page: Int): Modifier = gra
 @Composable
 private fun PageBody(
     page: TodaysPage,
-    isToday: Boolean,
+    isCurrent: Boolean,
     locationLabel: String,
     canUpgrade: Boolean,
     actions: AppActions,
@@ -215,7 +217,8 @@ private fun PageBody(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 28.dp, vertical = 64.dp),
     ) {
-        if (!isToday) {
+        // 오늘 것만 날짜를 감춘다. 첫 페이지라도 오늘이 아니면 날짜를 보여줘야 한다.
+        if (!page.isToday) {
             Text(page.dateKey, fontSize = 12.sp, fontFamily = Serif, color = Muted,
                 modifier = Modifier.padding(bottom = 12.dp))
         }
@@ -240,7 +243,7 @@ private fun PageBody(
         Text(page.attribution, fontSize = 13.sp, fontFamily = Serif, color = Muted,
             modifier = Modifier.padding(top = 20.dp))
 
-        if (isToday) {
+        if (isCurrent) {
             Footer(
                 locationLabel = locationLabel,
                 canUpgrade = canUpgrade,

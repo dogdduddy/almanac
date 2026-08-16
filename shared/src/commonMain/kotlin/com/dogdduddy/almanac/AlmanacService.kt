@@ -31,6 +31,13 @@ data class TodaysPage(
     val timeOfDay: TimeOfDay,
     val locationLabel: String,
     val dateKey: String,
+    /**
+     * 지금 이 순간의 페이지인가. 화면은 이때만 날짜를 감춘다("오늘"에는 날짜가 필요 없다).
+     *
+     * **목록의 첫 줄과 같은 뜻이 아니다.** 오프라인 등으로 오늘 페이지를 못 만들면
+     * 첫 줄은 과거 페이지이고, 그걸 오늘로 취급하면 날짜가 사라져 어제 것을 오늘처럼 읽는다.
+     */
+    val isToday: Boolean = false,
 ) {
     /** "Wuthering Heights, 1847 · Emily Brontë" */
     val attribution: String get() = "$title, $year · $author"
@@ -236,6 +243,7 @@ private fun ResolvedPage.toTodaysPage(
     timeOfDay = timeOfDay,
     locationLabel = locationLabel,
     dateKey = dateKey,
+    isToday = true,
 )
 
 internal fun currentYear(clock: DeviceClock): Int {
