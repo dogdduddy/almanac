@@ -54,15 +54,20 @@ class LocationRepositoryTest {
         assertEquals(london, resolved.coordinates)
     }
 
+    /**
+     * 권한이 없으면 위치는 그대로다. 다만 **소스는 불러야 한다** —
+     * 권한을 물을지 판단하는 것이 소스의 일이고, 저장소가 미리 막으면
+     * iOS 에서 프롬프트를 띄울 경로가 사라진다.
+     */
     @Test
-    fun withoutPermissionKeepsExistingLocation() = runTest {
+    fun withoutPermissionKeepsExistingLocationButStillAsksTheSource() = runTest {
         source.permission = false
         source.coordinates = london
 
         val resolved = repo.refresh()
         assertEquals(LocationMode.DEFAULT, resolved.mode)
         assertEquals(Cities.DEFAULT.name, resolved.label)
-        assertEquals(0, source.fixCalls, "권한이 없는데 측위를 시도했다")
+        assertEquals(1, source.fixCalls, "소스를 부르지 않으면 권한을 요청할 기회가 없다")
     }
 
     @Test
@@ -182,8 +187,9 @@ private class FakeLocationSource : LocationSource {
 
     override fun hasPermission() = permission
 
+    /** 실제 소스와 같이, 권한이 없으면 좌표를 주지 않는다. */
     override suspend fun currentCoordinates(): Coordinates? {
         fixCalls++
-        return coordinates
+        return if (permission) coordinates else null
     }
 }

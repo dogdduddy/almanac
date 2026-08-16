@@ -44,11 +44,15 @@ class LocationRepository(
      *
      * 수동 선택이 살아 있으면 **측위를 시도조차 하지 않는다** — 배터리도 아끼고
      * 유저의 선택도 존중한다.
+     *
+     * 반면 **권한 여부로는 막지 않는다.** 아직 아무것도 묻지 않은 상태에서 권한이
+     * 없다는 이유로 돌아서면 권한을 요청할 경로가 영영 생기지 않는다 (iOS 가 정확히
+     * 그랬다 — 자동 위치가 최초 설치에서 기본 도시에 머물렀다).
+     * 물을지 말지는 소스가 안다. 물을 수 없는 소스는 즉시 null 을 돌려준다.
      */
     suspend fun refresh(): ResolvedLocation {
         val existing = current()
         if (existing.mode == LocationMode.MANUAL) return existing
-        if (!source.hasPermission()) return existing
 
         val coordinates = source.currentCoordinates() ?: return existing
         val resolved = ResolvedLocation(
