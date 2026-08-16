@@ -5,6 +5,7 @@ local.properties
 .idea/
 *.iml
 .DS_Store
+/Key
 
 # Xcode
 xcuserdata/
@@ -19,3 +20,7 @@ iosApp/Almanac.xcodeproj/
 iosApp/build/
 # content.db 는 bakeContent 태스크가 굽는 생성물
 iosApp/Almanac/Resources/content.db
+
+
+# 실행 파일
+androidApp/release

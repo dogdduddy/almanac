@@ -11,6 +11,12 @@ plugins {
  * 여기 들어가는 것: Activity, Glance 위젯, Android 리소스(폰트/문자열/매니페스트).
  * 공유 로직과 UI 는 :composeApp / :shared 에서 가져온다.
  */
+/** local.properties. 서명 정보와 키를 여기서만 읽는다 — 저장소에 들어가지 않는다. */
+val localProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+
 android {
     namespace = "com.dogdduddy.almanac"
     compileSdk = 36
@@ -27,9 +33,37 @@ android {
         compose = true
     }
 
+    /**
+     * 릴리스 서명.
+     *
+     * 키스토어 경로와 비밀번호는 **local.properties 에서 읽는다** — 저장소에 넣지 않는다.
+     * 설정이 없으면 signingConfig 를 붙이지 않으므로 서명 없는 번들이 나오고,
+     * Play Console 업로드 단계에서 거부된다. 그때 아래 안내대로 키스토어를 만들면 된다.
+     *
+     * 키스토어 생성(한 번만, 직접 실행):
+     *   keytool -genkeypair -v -keystore ~/almanac-upload.jks \
+     *     -alias almanac -keyalg RSA -keysize 2048 -validity 10000
+     *
+     * **키스토어 파일과 비밀번호는 잃어버리면 복구가 안 된다.** 백업할 것.
+     * (Play 앱 서명을 쓰면 업로드 키는 재발급 가능하지만, 그것도 절차가 필요하다)
+     */
+    val keystoreFile = localProps.getProperty("almanac.keystore.file")
+    if (!keystoreFile.isNullOrBlank() && file(keystoreFile).exists()) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(keystoreFile)
+                storePassword = localProps.getProperty("almanac.keystore.password")
+                keyAlias = localProps.getProperty("almanac.keystore.alias")
+                keyPassword = localProps.getProperty("almanac.keystore.keyPassword")
+                    ?: localProps.getProperty("almanac.keystore.password")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfigs.findByName("release")?.let { signingConfig = it }
         }
     }
 
@@ -58,13 +92,32 @@ val checkReleaseBillingKey = tasks.register("checkReleaseBillingKey") {
     }
     val androidKey = (rootProject.findProperty("almanac.revenuecat.android") as String?)
         ?: local.getProperty("almanac.revenuecat.android").orEmpty()
-    val hasReal = androidKey.isNotBlank() && !androidKey.startsWith("test_")
+    val testKey = (rootProject.findProperty("almanac.revenuecat.test") as String?)
+        ?: local.getProperty("almanac.revenuecat.test").orEmpty()
+
+    // 실제로 앱에 실릴 키. shared 의 선택 규칙(실키 → test → 없음)과 같아야 한다.
+    val bootstrap = (rootProject.findProperty("almanac.billing.bootstrap") as String?)
+        ?.toBoolean() ?: false
+
+    // bootstrap 이면 composeApp 이 키를 아예 안 넣으므로 실릴 키도 없다.
+    val effectiveKey = if (bootstrap) "" else androidKey.ifBlank { testKey }
 
     doLast {
-        check(hasReal) {
-            "릴리스 빌드에 실제 RevenueCat Android 키가 없다.\n" +
-                "local.properties 에 almanac.revenuecat.android=goog_... 를 넣을 것.\n" +
-                "Test Store 키로 출시하면 앱이 크래시하고 심사에서 반려된다."
+        // Test Store 키는 **어떤 경우에도** 릴리스에 실리면 안 된다.
+        // SDK 가 프로덕션에서 크래시하고 심사에서 반려된다. 우회 플래그를 두지 않는다.
+        check(!effectiveKey.startsWith("test_")) {
+            "릴리스 빌드가 Test Store 키를 쓰려 한다.\n" +
+                "SDK 가 프로덕션에서 크래시하고 App Review 에서 반려된다.\n" +
+                "local.properties 에 almanac.revenuecat.android=goog_... 를 넣을 것."
+        }
+
+        // 키가 아예 없으면 앱은 PreviewBilling 으로 떨어진다 — 크래시하지는 않지만
+        // 결제가 동작하지 않는다. 스토어에 앱을 처음 올려 패키지명을 등록하는 단계에서는
+        // 이게 정상 경로이므로, 의도를 명시하면 통과시킨다.
+        check(effectiveKey.isNotBlank() || bootstrap) {
+            "릴리스 빌드에 RevenueCat 키가 없다. 결제가 동작하지 않는 빌드가 나온다.\n" +
+                "키가 아직 없어 스토어 등록용으로 올리는 것이라면:\n" +
+                "  ./gradlew :androidApp:bundleRelease -Palmanac.billing.bootstrap=true"
         }
     }
 }

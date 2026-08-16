@@ -46,6 +46,13 @@ val revenueCatKeys: Map<String, String> = run {
     fun read(name: String) =
         (findProperty("almanac.revenuecat.$name") as String?)
             ?: local.getProperty("almanac.revenuecat.$name") ?: ""
+
+    // 스토어에 앱을 처음 올려 패키지명을 등록하는 단계에서는 키가 하나도 없어야 한다.
+    // Test Store 키가 실리면 심사에서 반려되고, 실키는 아직 없기 때문이다.
+    // 이 플래그를 주면 결제 없는 빌드가 나온다 (앱은 PreviewBilling 으로 정상 동작).
+    val bootstrap = (findProperty("almanac.billing.bootstrap") as String?)?.toBoolean() ?: false
+    if (bootstrap) return@run mapOf("android" to "", "ios" to "", "test" to "")
+
     mapOf("android" to read("android"), "ios" to read("ios"), "test" to read("test"))
 }
 
