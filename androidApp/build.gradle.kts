@@ -122,8 +122,17 @@ val checkReleaseBillingKey = tasks.register("checkReleaseBillingKey") {
     }
 }
 
+/**
+ * 에셋에 content.db 를 넣는다.
+ *
+ * 손으로 복사해 두면 깨끗한 체크아웃에서 앱은 빌드되지만 첫 실행에서 DB 를 못 찾는다.
+ * 빌드가 직접 채우게 해서 그 경로를 없앤다.
+ */
+tasks.named("preBuild").configure { dependsOn(rootProject.tasks.named("syncContentToAndroid")) }
+
+// 릴리스는 콘텐츠 없이 나가면 안 된다 — 첫 실행에서 문장을 못 찾는 앱이 스토어로 간다.
 tasks.matching { it.name == "assembleRelease" || it.name == "bundleRelease" }
-    .configureEach { dependsOn(checkReleaseBillingKey) }
+    .configureEach { dependsOn(checkReleaseBillingKey, rootProject.tasks.named("verifyContentDb")) }
 
 dependencies {
     implementation(projects.composeApp)

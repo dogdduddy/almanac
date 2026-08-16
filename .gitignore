@@ -12,14 +12,15 @@ xcuserdata/
 *.xcworkspace/xcuserdata/
 DerivedData/
 
-# content.db 는 bakeContent 태스크가 굽는 생성물
+# content.db 번들 사본은 syncContent 가 정본(content/content.db)에서 만드는 생성물이다.
+# 정본은 커밋한다 — 큐레이션 CSV 가 저장소에 없어 깨끗한 체크아웃에서는 구울 수 없다.
 androidApp/src/main/assets/content.db
 
 # XcodeGen 생성물 — project.yml 이 진실의 원천이다
 iosApp/Almanac.xcodeproj/
 iosApp/build/
-# content.db 는 bakeContent 태스크가 굽는 생성물
 iosApp/Almanac/Resources/content.db
+iosApp/AlmanacWidget/Resources/content.db
 
 
 # 실행 파일
