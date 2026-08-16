@@ -103,3 +103,27 @@ iOS 에도 같은 가드가 필요하다. 아직 안 걸었다 — Xcode Release
 2. 코드 변경 없음 — 키 선택이 자동으로 실키를 우선한다
 3. **다시 검증해야 한다.** Test Store 는 스토어 실연동을 증명하지 않는다
    (StoreKit / Play Billing 경로, 유료 앱 계약, 프로모 코드 흐름)
+
+
+## iOS: RevenueCat 을 shared 에 두면 안 된다 (2026-08-16 발견)
+
+`purchases-kmp` 의 iOS cinterop 은 구버전 Xcode(16.4) 기준으로 빌드돼 있고,
+`libswiftCompatibility56` / `swiftCompatibilityConcurrency` / `swiftCompatibilityPacks`
+를 요구한다. **Xcode 26 툴체인에는 이 라이브러리들이 없다.**
+
+증상이 갈린다.
+- 앱 프레임워크 링크: **성공** (Xcode 가 링크하므로)
+- Kotlin/Native **테스트 실행 파일** 링크: **실패** (독립 실행 파일이라 스스로 링크해야 한다)
+
+즉 shared 에 의존성을 두면 앱은 멀쩡한데 **iOS 테스트가 통째로 안 돈다.**
+크로스플랫폼 골든 벡터가 거기 있으므로 잃으면 안 된다.
+
+그래서 RevenueCat 구현과 의존성을 `composeApp`(앱 쪽 모듈)으로 옮겼다.
+`shared` 는 순수 도메인으로 남고, `IosAlmanacGraph.billing` 은 기본값이 PreviewBilling 인
+`var` 이며 앱이 시작할 때 실제 구현을 주입한다.
+
+**위젯은 주입하지 않는다** — 아무것도 팔지 않으므로 결제 SDK 를 링크할 이유가 없다.
+익스텐션 크기와 메모리에도 유리하다.
+
+링커 옵션으로는 못 고친다. 라이브러리가 머신에 아예 없다.
+SDK 가 새 Xcode 기준으로 재빌드되면 다시 합칠 수 있다.

@@ -1,5 +1,3 @@
-import java.util.Properties
-
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidKmpLibrary)
@@ -30,47 +28,6 @@ sqldelight {
     }
 }
 
-/**
- * RevenueCat 클라이언트 키를 소스에 박지 않는다.
- *
- * 이 부류(공개 SDK 키)는 앱 바이너리에 심기는 값이라 비밀은 아니지만,
- * 저장소를 공개할 수 있으므로 local.properties 에서 읽어 빌드 때 주입한다.
- * 키가 없으면 빈 문자열이 들어가고 앱은 PreviewBilling 으로 떨어진다 —
- * 키 없이도 빌드와 실행이 되어야 CI 와 신규 클론이 막히지 않는다.
- */
-val revenueCatKeys: Map<String, String> = run {
-    val local = Properties().apply {
-        val f = rootProject.file("local.properties")
-        if (f.exists()) f.inputStream().use { load(it) }
-    }
-    fun read(name: String) =
-        (findProperty("almanac.revenuecat.$name") as String?) ?: local.getProperty("almanac.revenuecat.$name") ?: ""
-    mapOf("android" to read("android"), "ios" to read("ios"), "test" to read("test"))
-}
-
-val generateBillingKeys = tasks.register("generateBillingKeys") {
-    val outDir = layout.buildDirectory.dir("generated/billingKeys/kotlin")
-    val keys = revenueCatKeys
-    inputs.property("keys", keys)
-    outputs.dir(outDir)
-    doLast {
-        val dir = outDir.get().asFile.resolve("com/dogdduddy/almanac/billing")
-        dir.mkdirs()
-        dir.resolve("BillingKeys.kt").writeText(
-            """
-            package com.dogdduddy.almanac.billing
-
-            /** 빌드 때 local.properties 에서 주입된다. 손으로 고치지 말 것. */
-            internal object BillingKeys {
-                const val ANDROID: String = "${keys["android"]}"
-                const val IOS: String = "${keys["ios"]}"
-                const val TEST: String = "${keys["test"]}"
-            }
-            """.trimIndent()
-        )
-    }
-}
-
 kotlin {
     jvmToolchain(21)
 
@@ -95,9 +52,6 @@ kotlin {
     }
 
     sourceSets {
-        commonMain {
-            kotlin.srcDir(generateBillingKeys)
-        }
         commonMain.dependencies {
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.serialization.json)
@@ -105,7 +59,6 @@ kotlin {
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.content.negotiation)
             implementation(libs.ktor.serialization.json)
-            implementation(libs.revenuecat.core)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))

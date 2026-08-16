@@ -28,10 +28,16 @@ import com.dogdduddy.almanac.weather.systemDeviceClock
 object IosAlmanacGraph {
 
     /**
-     * 결제 백엔드. 키가 없어 아직 표시 전용이다.
-     * RevenueCat 키가 생기면 여기만 RevenueCatBilling 으로 바꾸면 된다.
+     * 결제 백엔드.
+     *
+     * 기본값은 [PreviewBilling] 이고, **앱이 시작할 때 실제 구현을 주입한다.**
+     * RevenueCat 구현이 shared 가 아니라 앱 모듈에 있기 때문이다 —
+     * 그 SDK 의 iOS cinterop 이 Kotlin/Native 테스트 링크를 깨뜨려서 분리했다.
+     *
+     * **위젯은 이 값을 바꾸지 않는다.** 위젯은 아무것도 팔지 않으므로 기본값이면 충분하고,
+     * 익스텐션이 결제 SDK 를 링크할 이유도 없다.
      */
-    val billing: Billing get() = PreviewBilling
+    var billing: Billing = PreviewBilling
 
     private val clock by lazy { systemDeviceClock() }
     private val factory by lazy { DatabaseFactory() }

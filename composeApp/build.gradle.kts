@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidKmpLibrary)
@@ -25,6 +27,51 @@ compose.resources {
     generateResClass = always
 }
 
+/**
+ * RevenueCat 클라이언트 키를 소스에 박지 않는다. local.properties 에서 읽어 주입한다.
+ *
+ * **왜 shared 가 아니라 여기인가:** RevenueCat 의 iOS cinterop 이 구버전 Xcode 기준으로
+ * 빌드돼 있어 Kotlin/Native **테스트 실행 파일**을 링크할 수 없다
+ * (libswiftCompatibility56 등이 Xcode 26 툴체인에 없다).
+ * 앱 프레임워크는 Xcode 가 링크하므로 문제없지만, shared 에 두면 shared 의 iOS 테스트가
+ * 통째로 못 돈다 — 크로스플랫폼 골든 벡터가 거기 있으므로 잃으면 안 된다.
+ *
+ * 그래서 결제 구현은 앱 쪽 모듈에 둔다. shared 는 순수 도메인으로 남는다.
+ */
+val revenueCatKeys: Map<String, String> = run {
+    val local = Properties().apply {
+        val f = rootProject.file("local.properties")
+        if (f.exists()) f.inputStream().use { load(it) }
+    }
+    fun read(name: String) =
+        (findProperty("almanac.revenuecat.$name") as String?)
+            ?: local.getProperty("almanac.revenuecat.$name") ?: ""
+    mapOf("android" to read("android"), "ios" to read("ios"), "test" to read("test"))
+}
+
+val generateBillingKeys = tasks.register("generateBillingKeys") {
+    val outDir = layout.buildDirectory.dir("generated/billingKeys/kotlin")
+    val keys = revenueCatKeys
+    inputs.property("keys", keys)
+    outputs.dir(outDir)
+    doLast {
+        val dir = outDir.get().asFile.resolve("com/dogdduddy/almanac/billing")
+        dir.mkdirs()
+        dir.resolve("BillingKeys.kt").writeText(
+            """
+            package com.dogdduddy.almanac.billing
+
+            /** 빌드 때 local.properties 에서 주입된다. 손으로 고치지 말 것. */
+            internal object BillingKeys {
+                const val ANDROID: String = "${keys["android"]}"
+                const val IOS: String = "${keys["ios"]}"
+                const val TEST: String = "${keys["test"]}"
+            }
+            """.trimIndent()
+        )
+    }
+}
+
 kotlin {
     jvmToolchain(21)
 
@@ -48,8 +95,12 @@ kotlin {
     }
 
     sourceSets {
+        commonMain {
+            kotlin.srcDir(generateBillingKeys)
+        }
         commonMain.dependencies {
             api(projects.shared)
+            api(libs.revenuecat.core)
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)

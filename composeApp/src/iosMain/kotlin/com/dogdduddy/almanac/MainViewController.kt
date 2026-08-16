@@ -10,6 +10,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import com.dogdduddy.almanac.billing.createIosBilling
 import platform.UIKit.UIViewController
 
 /**
@@ -23,6 +24,9 @@ import platform.UIKit.UIViewController
 fun MainViewController(): UIViewController = ComposeUIViewController {
     var state by remember { mutableStateOf<AppState>(AppState.Loading) }
     val scope = remember { CoroutineScope(SupervisorJob() + Dispatchers.Main) }
+
+    // 결제 구현 주입. 앱에서만 하고 위젯은 하지 않는다.
+    LaunchedEffect(Unit) { IosAlmanacGraph.billing = createIosBilling() }
 
     fun load() {
         scope.launch {
