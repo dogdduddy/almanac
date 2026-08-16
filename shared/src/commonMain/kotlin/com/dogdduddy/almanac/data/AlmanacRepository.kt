@@ -102,6 +102,13 @@ class AlmanacRepository(
      * 표시 시점 랜덤이 아니다. 같은 입력이면 몇 번을 불러도 같은 결과이며,
      * 앱과 위젯이 각각 호출해도 같은 문장이 나온다.
      *
+     * **이미 기록된 슬롯은 다시 고르지 않는다.** 기록을 남기는 순간 그 문장은
+     * 히스토리의 맨 앞이 되고, 다시 고르면 자기 자신을 회피 대상으로 삼아 결과가
+     * 뒤집힌다. 앱이 열고 위젯이 갱신하는 것만으로 문장이 바뀌게 되는 경로다.
+     *
+     * 날씨 그룹이 바뀌었으면 슬롯 기록을 무시하고 다시 고른다 — 날씨는 시드 입력이고,
+     * 비가 그친 뒤에도 비 이야기를 계속 보여줄 이유가 없다.
+     *
      * @param record true 면 daily_page 에 기록한다. 위젯 미리보기 등에서는 false.
      */
     fun resolvePage(
@@ -118,14 +125,20 @@ class AlmanacRepository(
         val owned = ownedPackIds()
         if (owned.isEmpty()) return null
 
+        val request = PageRequest(dateKey, timeOfDay, weatherGroup, installId)
+
+        recordedPage(request, locationKey)?.let { return it }
+
         val candidates = contentQueries
             .candidateIdsForBucket(language, weatherGroup.key, timeOfDay.key, owned)
             .executeAsList()
 
         val selection = PageSelector.select(
-            request = PageRequest(dateKey, timeOfDay, weatherGroup, installId),
+            request = request,
             candidateIds = candidates,
-            recentlyShownIds = userQueries.recentEntryIds(historyWindow.toLong()).executeAsList(),
+            recentlyShownIds = userQueries
+                .recentEntryIdsExcludingSlot(dateKey, timeOfDay.key, locationKey, historyWindow.toLong())
+                .executeAsList(),
             historyWindow = historyWindow,
         ) ?: return null
 
@@ -143,6 +156,23 @@ class AlmanacRepository(
             )
         }
         return ResolvedPage(entry, selection.bucket, selection.seed)
+    }
+
+    /**
+     * 이 슬롯에 이미 확정된 페이지. 없거나 더 이상 유효하지 않으면 null.
+     *
+     * 기록은 있는데 문장이 사라진 경우(content.db 교체로 발췌가 빠졌다)에는 null 을
+     * 돌려 다시 고르게 한다 — 아카이브와 달리 오늘 페이지는 비울 수 없다.
+     */
+    private fun recordedPage(request: PageRequest, locationKey: String): ResolvedPage? {
+        val row = userQueries
+            .pageFor(request.dateKey, request.timeOfDay.key, locationKey)
+            .executeAsOneOrNull()
+            ?: return null
+        if (row.weather_group != request.weatherGroup.key) return null
+
+        val entry = contentQueries.entryById(row.entry_id).executeAsOneOrNull() ?: return null
+        return ResolvedPage(entry, request.bucket, PageSelector.seedFor(request))
     }
 
     // ---- 진단 --------------------------------------------------------------

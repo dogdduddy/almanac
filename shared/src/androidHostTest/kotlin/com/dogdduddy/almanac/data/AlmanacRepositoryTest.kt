@@ -320,6 +320,59 @@ class AlmanacRepositoryTest {
         assertEquals(1, repo.archive(limit = 100).size, "같은 슬롯은 한 줄만 남아야 한다")
     }
 
+    /**
+     * 기록을 남긴 뒤 같은 슬롯을 다시 조회해도 문장이 같아야 한다.
+     *
+     * `record = false` 로만 검증하면 이 경로를 놓친다 — 기록된 문장이 히스토리
+     * 맨 앞으로 들어와 자기 자신을 회피 대상으로 삼는 순간 결과가 뒤집힌다.
+     * 앱을 열고 위젯이 갱신되는 것만으로 문장이 바뀌던 버그의 회귀 테스트다.
+     */
+    @Test
+    fun recordedSlotKeepsItsEntryOnEveryLaterRead() {
+        repo.ensureBaseEntitlement()
+        repo.grantPack("sea-1851", PackSource.PURCHASE)
+
+        val first = resolve()
+        assertNotNull(first)
+        repeat(10) {
+            now += 60
+            assertEquals(first.entry.id, resolve()?.entry?.id, "같은 슬롯인데 문장이 바뀌었다")
+        }
+        // 위젯 미리보기 경로(record=false)도 같은 문장을 봐야 한다.
+        assertEquals(first.entry.id, resolve(record = false)?.entry?.id)
+    }
+
+    /**
+     * 날씨가 바뀌면 다시 고른다. 그리고 원래 날씨로 돌아오면 원래 문장으로 돌아온다.
+     * (슬롯 기록이 히스토리에서 빠지지 않으면 이 왕복에서 문장이 갈린다.)
+     */
+    @Test
+    fun weatherChangeRepicksAndReturningRestoresTheSameEntry() {
+        repo.ensureBaseEntitlement()
+        val rain = resolve(group = WeatherGroup.RAIN)
+        assertNotNull(rain)
+
+        val clear = resolve(group = WeatherGroup.CLEAR)
+        assertNotNull(clear)
+        assertTrue(clear.entry.id != rain.entry.id, "날씨가 바뀌면 후보 자체가 달라진다")
+
+        assertEquals(rain.entry.id, resolve(group = WeatherGroup.RAIN)?.entry?.id)
+    }
+
+    /** 같은 날 안에서는 실제 시간순(저녁 → 낮 → 아침)으로 내려와야 한다. */
+    @Test
+    fun archiveOrdersSlotsChronologicallyWithinADay() {
+        repo.ensureBaseEntitlement()
+        for (slot in TimeOfDay.entries) {
+            now += 3_600
+            assertNotNull(resolve(timeOfDay = slot))
+        }
+        assertEquals(
+            listOf(TimeOfDay.EVENING_NIGHT.key, TimeOfDay.DAY.key, TimeOfDay.MORNING.key),
+            repo.archive(limit = 10).map { it.time_of_day },
+        )
+    }
+
     @Test
     fun historyPushesSelectionAwayFromRecentEntries() {
         repo.ensureBaseEntitlement()
