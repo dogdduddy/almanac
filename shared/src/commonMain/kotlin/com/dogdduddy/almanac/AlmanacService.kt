@@ -1,6 +1,7 @@
 package com.dogdduddy.almanac
 
 import com.dogdduddy.almanac.core.TimeOfDay
+import com.dogdduddy.almanac.core.randomUuid
 import com.dogdduddy.almanac.billing.Billing
 import com.dogdduddy.almanac.billing.BillingProduct
 import com.dogdduddy.almanac.core.WeatherGroup
@@ -96,7 +97,7 @@ class AlmanacService(
             longitude = place.coordinates.longitude,
         ) ?: return PageResult.Unavailable(PageUnavailable.NO_WEATHER)
 
-        val installId = content.installId { newInstallId(clock.nowEpochSeconds()) }
+        val installId = content.installId { newInstallId() }
 
         val resolved = content.resolvePage(
             dateKey = conditions.dateKey,
@@ -244,22 +245,13 @@ internal fun currentYear(clock: DeviceClock): Int {
 }
 
 /**
- * 설치 ID. UUID v4 형태의 소문자 문자열.
+ * 설치 ID. UUID 형태의 소문자 문자열.
  *
- * 플랫폼 UUID API 에 의존하지 않는다 — 형식이 흔들리면 시드가 갈라지기 때문이다.
- * 암호학적 강도는 필요 없다. 필요한 건 **설치마다 다르고 이후 불변**인 것뿐이다.
+ * 필요한 건 **설치마다 다르고 이후 불변**인 것이다. 시각으로 만들면 안 된다 —
+ * 초 단위 시각을 시드로 쓰면 같은 초에 처음 실행한 설치들이 같은 ID 를 받아
+ * 콘텐츠 순서까지 공유한다.
+ *
+ * 플랫폼 간 같아야 하는 것은 생성 알고리즘이 아니라 **저장 형식**이므로,
+ * 난수는 플랫폼에 맡기고 여기서는 소문자로 정규화만 한다.
  */
-internal fun newInstallId(seedEpochSeconds: Long): String {
-    var state = seedEpochSeconds.toULong() * 6364136223846793005uL + 1442695040888963407uL
-    fun nextHex(): Char {
-        state = state * 6364136223846793005uL + 1442695040888963407uL
-        return "0123456789abcdef"[((state shr 33) % 16uL).toInt()]
-    }
-    return buildString {
-        repeat(8) { append(nextHex()) }; append('-')
-        repeat(4) { append(nextHex()) }; append('-')
-        append('4'); repeat(3) { append(nextHex()) }; append('-')
-        append("89ab"[((state shr 29) % 4uL).toInt()]); repeat(3) { append(nextHex()) }; append('-')
-        repeat(12) { append(nextHex()) }
-    }
-}
+internal fun newInstallId(): String = randomUuid().lowercase()
