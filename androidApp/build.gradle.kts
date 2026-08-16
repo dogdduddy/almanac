@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.composeCompiler)
@@ -35,6 +37,40 @@ android {
         jvmToolchain(21)
     }
 }
+
+/**
+ * 릴리스 빌드에 Test Store 키가 실려나가는 것을 막는다.
+ *
+ * RevenueCat SDK 가 직접 경고한다 —
+ *   "Our SDK will crash if using it in production.
+ *    Apps submitted with a Test Store API key will be rejected during App Review."
+ *
+ * 개발 중에는 실키가 없어 test 키로 떨어지는 게 정상이고, 그 편의가 그대로
+ * 릴리스로 새는 것이 위험하다. 사람이 기억하는 대신 빌드가 막는다.
+ */
+val checkReleaseBillingKey = tasks.register("checkReleaseBillingKey") {
+    group = "verification"
+    description = "릴리스 빌드에 실제 RevenueCat 키가 있는지 검사한다"
+
+    val local = Properties().apply {
+        val f = rootProject.file("local.properties")
+        if (f.exists()) f.inputStream().use { load(it) }
+    }
+    val androidKey = (rootProject.findProperty("almanac.revenuecat.android") as String?)
+        ?: local.getProperty("almanac.revenuecat.android").orEmpty()
+    val hasReal = androidKey.isNotBlank() && !androidKey.startsWith("test_")
+
+    doLast {
+        check(hasReal) {
+            "릴리스 빌드에 실제 RevenueCat Android 키가 없다.\n" +
+                "local.properties 에 almanac.revenuecat.android=goog_... 를 넣을 것.\n" +
+                "Test Store 키로 출시하면 앱이 크래시하고 심사에서 반려된다."
+        }
+    }
+}
+
+tasks.matching { it.name == "assembleRelease" || it.name == "bundleRelease" }
+    .configureEach { dependsOn(checkReleaseBillingKey) }
 
 dependencies {
     implementation(projects.composeApp)

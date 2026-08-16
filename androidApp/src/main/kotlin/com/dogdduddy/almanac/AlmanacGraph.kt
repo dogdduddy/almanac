@@ -3,7 +3,7 @@ package com.dogdduddy.almanac
 import android.content.Context
 import com.dogdduddy.almanac.billing.Billing
 import com.dogdduddy.almanac.billing.EntitlementSync
-import com.dogdduddy.almanac.billing.PreviewBilling
+import com.dogdduddy.almanac.billing.createAndroidBilling
 import com.dogdduddy.almanac.data.AlmanacRepository
 import com.dogdduddy.almanac.data.DatabaseFactory
 import com.dogdduddy.almanac.db.content.ContentDatabase
@@ -33,10 +33,15 @@ object AlmanacGraph {
     private var syncRef: EntitlementSync? = null
 
     /**
-     * 결제 백엔드. 키가 없어 아직 표시 전용이다.
-     * RevenueCat 키가 생기면 여기만 RevenueCatBilling 으로 바꾸면 된다.
+     * 결제 백엔드.
+     *
+     * 실키가 있으면 그것을, 없으면 Test Store 키를, 둘 다 없으면 PreviewBilling 을 쓴다.
+     * 선택은 shared 의 createAndroidBilling() 이 한다 — 키가 어디 있는지 앱이 알 필요 없다.
+     *
+     * lazy 인 이유: RevenueCat 초기화가 Application context 를 잡으므로
+     * 클래스 로딩 시점이 아니라 첫 사용 시점에 일어나야 한다.
      */
-    val billing: Billing get() = PreviewBilling
+    val billing: Billing by lazy { createAndroidBilling() }
 
     fun entitlements(context: Context): EntitlementSync {
         service(context)

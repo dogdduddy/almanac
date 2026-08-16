@@ -2,6 +2,10 @@
 
 2026-08-15. 코드 이음매는 만들었고, **키와 스토어 상품이 없어 SDK 자체는 아직 안 붙였다.**
 
+## 진행 상황 (2026-08-16 갱신)
+
+SDK 를 붙였다. **Test Store 키로 초기화까지 확인**했고, 상품 조회는 아직 빈 목록이다.
+
 ## 지금 있는 것
 
 - `billing/Billing.kt` — 결제 백엔드 인터페이스. 구현은 `NoBilling` 하나(키 없을 때용)
@@ -49,3 +53,53 @@ com.revenuecat.purchases:purchases-kmp-core:3.5.0
 무료 체험 또는 프로모 코드를 제출물에 넣어야 한다.
 비소모품이므로 App Store 프로모 코드가 맞는다. **제출 전에 코드 입력 → 즉시 전체 해제가
 한 번에 되는지 직접 확인할 것** — 여기서 막히면 심사위원이 본 것은 무료 버전뿐이다.
+
+
+---
+
+# 2026-08-16 — SDK 연결 결과
+
+## 된 것
+
+- `purchases-kmp-core:3.5.0` 의존성 추가. **iOS Native 컴파일까지 통과**
+- `RevenueCatBilling` 구현. 엔티틀먼트 → 보유 팩 매핑
+- 키 주입: `local.properties` → 빌드 시 `BillingKeys.kt` 생성.
+  소스에 키가 안 들어가므로 저장소를 공개해도 된다
+- 키 선택 순서: **실키 → Test Store 키 → PreviewBilling**.
+  키가 하나도 없어도 앱은 정상 동작한다 (CI, 신규 클론)
+- Android 에뮬레이터에서 SDK 초기화 확인:
+  `WARN: Using a Test Store API key.`
+
+## 안 된 것 — 상품이 없다
+
+페이월 진입점("The shelf")이 안 뜬다. `products()` 가 빈 목록이기 때문이다.
+
+**RevenueCat 대시보드에 Test Store 상품을 만들어야 한다:**
+
+1. Test Store 앱 → Products → 상품 생성
+   - identifier: `com.dogdduddy.almanac.core2026`
+2. Entitlements → 생성
+   - identifier: **`core-2026`** (content.db 의 packs.id 와 같아야 매핑 테이블이 필요 없다)
+   - 위 상품을 이 엔티틀먼트에 연결
+3. Offering 은 쓰지 않는다 — 우리는 `getProducts(productIds)` 로 직접 조회한다
+
+## ⚠️ Test Store 키로 출시하면 안 된다
+
+SDK 가 직접 경고한다:
+
+> Our SDK will **crash if using it in production**.
+> Apps submitted with a Test Store API key will be **rejected during App Review**.
+
+개발 중에는 실키가 없어 test 키로 떨어지는 게 정상이고, **그 편의가 릴리스로 새는 것이 위험하다.**
+사람이 기억하는 대신 빌드가 막도록 `checkReleaseBillingKey` 태스크를 걸었다 —
+`assembleRelease` / `bundleRelease` 는 실키(`goog_`)가 없으면 실패한다.
+
+iOS 에도 같은 가드가 필요하다. 아직 안 걸었다 — Xcode Release 스킴에서
+`almanac.revenuecat.ios` 를 검사하는 스크립트를 붙일 것.
+
+## 실키가 나오면
+
+1. `local.properties` 에 `almanac.revenuecat.android` / `almanac.revenuecat.ios` 추가
+2. 코드 변경 없음 — 키 선택이 자동으로 실키를 우선한다
+3. **다시 검증해야 한다.** Test Store 는 스토어 실연동을 증명하지 않는다
+   (StoreKit / Play Billing 경로, 유료 앱 계약, 프로모 코드 흐름)
