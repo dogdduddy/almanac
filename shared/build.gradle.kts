@@ -24,6 +24,14 @@ sqldelight {
             srcDirs.setFrom("src/commonMain/sqldelight/user")
             // user.db 는 유저 데이터가 들어 있으므로 마이그레이션 검증을 켠다.
             verifyMigrations.set(true)
+            // 검증의 기준이 되는 스키마 스냅샷(<버전>.db)을 여기에 굽고 **커밋한다.**
+            // 이게 없으면 verifyCommonMainUserDatabaseMigration 이 기준 파일을 못 찾아
+            // `./gradlew check` 가 통째로 빨간불이 된다.
+            //
+            // 스키마를 바꿨다면 .sqm 마이그레이션을 추가한 뒤
+            //   ./gradlew :shared:generateCommonMainUserDatabaseSchema
+            // 로 새 버전 스냅샷을 굽는다. 기존 스냅샷은 지우지 않는다 — 그게 검증의 출발점이다.
+            schemaOutputDirectory.set(file("src/commonMain/sqldelight/user"))
         }
     }
 }
