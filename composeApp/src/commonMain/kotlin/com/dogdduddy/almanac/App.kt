@@ -611,7 +611,7 @@ private fun AboutScreen(onBack: () -> Unit) {
         Section("Weather", MetNorwayClient.ATTRIBUTION)
         Section(
             "Typefaces",
-            "Crimson Text and EB Garamond, both licensed under the SIL Open Font License 1.1.",
+            "Crimson Text, licensed under the SIL Open Font License 1.1.",
         )
     }
 }
