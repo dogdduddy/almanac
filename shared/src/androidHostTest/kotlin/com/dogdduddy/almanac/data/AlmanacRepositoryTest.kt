@@ -318,7 +318,7 @@ class AlmanacRepositoryTest {
     @Test
     fun recordingIsIdempotentPerSlot() {
         repo.ensureBaseEntitlement()
-        resolve(); resolve(); resolve()
+        resolve(countAsRead = true); resolve(countAsRead = true); resolve(countAsRead = true)
         assertEquals(1, repo.archive(limit = 100).size, "같은 슬롯은 한 줄만 남아야 한다")
     }
 
@@ -367,7 +367,7 @@ class AlmanacRepositoryTest {
         repo.ensureBaseEntitlement()
         for (slot in TimeOfDay.entries) {
             now += 3_600
-            assertNotNull(resolve(timeOfDay = slot))
+            assertNotNull(resolve(timeOfDay = slot, countAsRead = true))
         }
         assertEquals(
             listOf(TimeOfDay.EVENING_NIGHT.key, TimeOfDay.DAY.key, TimeOfDay.MORNING.key),
@@ -404,11 +404,13 @@ class AlmanacRepositoryTest {
         val fromWidget = resolve(countAsRead = false)
         assertNotNull(fromWidget)
         assertEquals(emptyMap(), repo.readCounts(), "위젯 갱신이 읽음으로 잡혔다")
+        assertEquals(emptyList(), repo.archive(limit = 10), "위젯만 그린 슬롯이 아카이브에 나타났다")
 
         // 앱이 같은 슬롯을 열면 같은 문장이 나오고, 그때 비로소 읽음이 된다.
         val fromApp = resolve(countAsRead = true)
         assertEquals(fromWidget.entry.id, fromApp?.entry?.id, "위젯과 앱이 다른 문장을 봤다")
         assertEquals(mapOf(fromWidget.entry.id to 1), repo.readCounts())
+        assertEquals(1, repo.archive(limit = 10).size, "앱에서 읽은 슬롯이 아카이브에 없다")
     }
 
     /** 앱을 하루에 열 번 열어도 그 문장을 열 번 읽은 것은 아니다. */
@@ -467,7 +469,7 @@ class AlmanacRepositoryTest {
     @Test
     fun archiveSurvivesContentDatabaseReplacement() {
         repo.ensureBaseEntitlement()
-        resolve()
+        resolve(countAsRead = true)
         assertEquals(1, repo.archive(limit = 10).size)
 
         // 앱 업데이트로 content.db 가 통째로 교체되는 상황을 재현한다.

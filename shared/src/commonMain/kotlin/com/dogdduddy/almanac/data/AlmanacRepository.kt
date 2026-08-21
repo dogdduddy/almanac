@@ -9,7 +9,7 @@ import com.dogdduddy.almanac.db.content.ContentDatabase
 import com.dogdduddy.almanac.db.content.Entries
 import com.dogdduddy.almanac.db.user.UserDatabase
 
-/** 지난 기록 한 장. */
+/** 앱에서 실제로 읽은 지난 기록 한 장. */
 data class ArchivedPage(
     val dateKey: String,
     val timeOfDay: TimeOfDay,
@@ -230,6 +230,7 @@ class AlmanacRepository(
         return Bucket.ALL.filterNot { it in covered }
     }
 
+    /** 앱에서 실제로 읽은 슬롯만 돌려준다. 위젯으로 고정만 된 슬롯은 제외한다. */
     fun archive(limit: Int, offset: Int = 0) =
         userQueries.archive(limit.toLong(), offset.toLong()).executeAsList()
 
