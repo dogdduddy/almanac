@@ -115,7 +115,9 @@ class AlmanacWidget : GlanceAppWidget() {
                     color = ColorProvider(INK),
                     fontFamily = FontFamily.Serif,
                 ),
-                maxLines = 6,
+                // Glance 의 기본 Text 스타일은 maxLines 초과분을 끝 생략표로 자른다.
+                // 위젯은 전문을 소비하는 화면이 아니라 앱으로 이어지는 티저다.
+                maxLines = 3,
             )
 
             Spacer(GlanceModifier.height(8.dp))
@@ -127,7 +129,7 @@ class AlmanacWidget : GlanceAppWidget() {
                     color = ColorProvider(MUTED),
                     fontFamily = FontFamily.Serif,
                 ),
-                maxLines = 2,
+                maxLines = 1,
             )
         }
     }

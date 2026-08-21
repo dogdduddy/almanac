@@ -81,13 +81,17 @@ struct AlmanacWidgetView: View {
                 Text(page.text)
                     .font(.system(.footnote, design: .serif))
                     .foregroundStyle(Color.ink)
-                    .lineLimit(6)
+                    // 위젯은 완독 화면이 아니라 앱으로 이어지는 티저다.
+                    // tail 생략을 명시해 문장이 끝난 것으로 오해하지 않게 한다.
+                    .lineLimit(3)
+                    .truncationMode(.tail)
                     .padding(.top, 10)
 
                 Text(page.attribution)
                     .font(.system(.caption2, design: .serif))
                     .foregroundStyle(Color.muted)
-                    .lineLimit(2)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                     .padding(.top, 8)
             } else {
                 Text("Waiting for the sky…")
@@ -109,7 +113,8 @@ struct AlmanacWidget: Widget {
         }
         .configurationDisplayName("Almanac")
         .description("오늘의 하늘을 쓴 문장")
-        .supportedFamilies([.systemMedium, .systemLarge])
+        // 큰 위젯에서 전문을 소비하게 하지 않고, 한눈에 읽는 중형 티저로 고정한다.
+        .supportedFamilies([.systemMedium])
     }
 }
 
