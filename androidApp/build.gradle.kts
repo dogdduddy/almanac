@@ -134,6 +134,52 @@ tasks.named("preBuild").configure { dependsOn(rootProject.tasks.named("syncConte
 tasks.matching { it.name == "assembleRelease" || it.name == "bundleRelease" }
     .configureEach { dependsOn(checkReleaseBillingKey, rootProject.tasks.named("verifyContentDb")) }
 
+/**
+ * Compose 폰트가 실제로 에셋에 실렸는지 검사한다.
+ *
+ * 이 검사가 있는 이유: AGP 9 의 KMP 라이브러리 플러그인에서 CMP 리소스가 APK 에서
+ * 통째로 빠지는데 **빌드는 초록으로 통과했다** (CMP-9547). 앱은 멀쩡히 실행되고
+ * Font(Res.font.crimson_text) 만 조용히 기본 폰트로 폴백해서, iOS 는 세리프이고
+ * 안드로이드는 산세리프인 채로 출시될 뻔했다. 타이포그래피가 이 앱의 전부인데
+ * 그것이 컴파일 에러도 런타임 에러도 없이 사라진다.
+ *
+ * composeApp 의 experimentalProperties 한 줄이 그 스위치라, 누가 지우면 같은 일이
+ * 다시 조용히 일어난다. 그래서 파일이 실렸는지를 직접 본다.
+ *
+ * 경로는 CMP 런타임 규약이다 — 생성된 Res.kt 가
+ * `readResourceBytes("composeResources/<packageOfResClass>/" + path)` 로 찾는다.
+ */
+val composeFontAssetPath =
+    "composeResources/com.dogdduddy.almanac.resources/font/crimson_text.ttf"
+
+listOf("Debug", "Release").forEach { variant ->
+    val mergedAssets = layout.buildDirectory
+        .dir("intermediates/assets/${variant.replaceFirstChar { it.lowercase() }}/merge${variant}Assets")
+    val expected = composeFontAssetPath
+
+    val verify = tasks.register("verifyComposeFont$variant") {
+        group = "verification"
+        description = "$variant 에셋에 Compose 폰트가 실렸는지 검사한다"
+
+        doLast {
+            val root = mergedAssets.get().asFile
+            check(root.isDirectory) {
+                "에셋 병합 결과를 찾을 수 없다: ${root.path}\n" +
+                    "AGP 가 중간 산출물 경로를 바꿨을 수 있다. 이 검사의 경로를 갱신할 것."
+            }
+            check(File(root, expected).isFile) {
+                "Compose 폰트가 에셋에 없다: $expected\n" +
+                    "앱이 Crimson Text 대신 시스템 기본 폰트로 그려진다 — 에러 없이.\n" +
+                    "composeApp/build.gradle.kts 의\n" +
+                    "  experimentalProperties[\"android.experimental.kmp.enableAndroidResources\"] = true\n" +
+                    "가 지워졌는지 확인할 것. 배경은 CMP-9547."
+            }
+        }
+    }
+
+    tasks.matching { it.name == "merge${variant}Assets" }.configureEach { finalizedBy(verify) }
+}
+
 dependencies {
     implementation(projects.composeApp)
     implementation(projects.shared)

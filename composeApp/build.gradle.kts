@@ -86,6 +86,19 @@ kotlin {
         namespace = "com.dogdduddy.almanac.ui"
         compileSdk = 36
         minSdk = 26
+
+        // Compose 리소스(폰트)를 APK 로 실어보내는 유일한 스위치다. 끄면 조용히 사라진다.
+        //
+        // AGP 9 의 KMP 라이브러리 플러그인은 기본적으로 안드로이드 리소스를 다루지 않는다.
+        // 그래서 CMP 의 copyAndroidMainComposeResourcesToAndroidAssets 가 출력 위치를
+        // 받지 못해 실패하고, composeResources 가 통째로 APK 에서 빠진다.
+        // 빌드는 초록인데 Font(Res.font.crimson_text) 만 조용히 기본 폰트로 폴백한다 —
+        // iOS 는 세리프, 안드로이드는 산세리프로 갈라진 채 출시될 수 있었다.
+        //
+        // JetBrains 가 안내한 해법이다 (CMP-9547).
+        // CMP 가 이걸 기본 동작으로 고치면 지워도 된다. 그때까지는 verifyComposeFont 가 지킨다.
+        @Suppress("UnstableApiUsage")
+        experimentalProperties["android.experimental.kmp.enableAndroidResources"] = true
     }
 
     // iosX64(인텔 시뮬레이터)는 뺀다 — Compose Multiplatform 1.11.x 가 해당 타깃 아티팩트를
