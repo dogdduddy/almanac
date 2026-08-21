@@ -132,11 +132,13 @@ val ALMANAC_CATALOG: List<BillingCatalogEntry> = listOf(
 /**
  * 플랫폼 키를 골라 결제 백엔드를 만든다.
  *
- * 실키를 우선하고, 없으면 Test Store 키로 떨어진다.
+ * 실키를 우선하고, 쓸 수 없으면 Test Store 키로 떨어진다.
  * 둘 다 없으면 [PreviewBilling] — 화면은 보이되 구매는 되지 않는다.
+ *
+ * 키가 "비었는지" 가 아니라 "형식이 맞는지" 로 고른다. 이유는 [selectBillingKey] 참고.
  */
 fun createBilling(platformKey: String): Billing {
-    val key = platformKey.ifBlank { BillingKeys.TEST }
+    val key = selectBillingKey(platformKey, BillingKeys.TEST) ?: return PreviewBilling
     return if (configureRevenueCat(key)) RevenueCatBilling(ALMANAC_CATALOG) else PreviewBilling
 }
 
