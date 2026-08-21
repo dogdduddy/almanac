@@ -7,8 +7,8 @@ import com.dogdduddy.almanac.core.resolveWeatherGroup
 /**
  * 버킷 판정에 필요한 최소한의 날씨 상태.
  *
- * 예보 전체를 들고 다니지 않는다 — 이 앱은 날씨 앱이 아니라서
- * 화면에 기온도 강수량도 띄우지 않는다. 문장을 고르는 데 필요한 것만 남긴다.
+ * 예보 전체를 들고 다니지 않는다. 문장을 고르는 값과 오늘 페이지에 작게 보여줄
+ * 기온만 남기고, 강수량·체감온도 같은 날씨 앱용 세부 정보는 보존하지 않는다.
  */
 data class WeatherSnapshot(
     val wmoCode: Int,

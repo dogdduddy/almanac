@@ -13,6 +13,8 @@ data class Conditions(
     val dateKey: String,
     val timeOfDay: TimeOfDay,
     val weatherGroup: WeatherGroup,
+    /** 현재 화면에 보여줄 섭씨 기온. 제공처가 값을 주지 않으면 null 이다. */
+    val temperatureC: Double?,
     val windFlag: Boolean,
     /** 캐시만 쓰고 네트워크를 건드리지 않았는지. 진단·테스트용. */
     val servedFromCache: Boolean,
@@ -54,6 +56,7 @@ class WeatherRepository(
                 localHour = clock.localHour(now),
             ),
             weatherGroup = group,
+            temperatureC = snapshot.first.temperatureC,
             windFlag = snapshot.first.windFlag,
             servedFromCache = snapshot.second,
         )

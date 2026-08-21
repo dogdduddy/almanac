@@ -28,6 +28,8 @@ data class TodaysPage(
     val section: String?,
     val year: Int,
     val weatherGroup: WeatherGroup,
+    /** 오늘 페이지의 섭씨 기온. 과거 기록에는 저장하지 않으므로 null 이다. */
+    val temperatureC: Double?,
     val timeOfDay: TimeOfDay,
     val locationLabel: String,
     val dateKey: String,
@@ -125,6 +127,7 @@ class AlmanacService(
             resolved.toTodaysPage(
                 currentYear = currentYear(clock),
                 weatherGroup = conditions.weatherGroup,
+                temperatureC = conditions.temperatureC,
                 timeOfDay = conditions.timeOfDay,
                 locationLabel = place.label,
                 dateKey = conditions.dateKey,
@@ -160,6 +163,7 @@ class AlmanacService(
                 section = archived.entry.section,
                 year = archived.entry.year.toInt(),
                 weatherGroup = archived.weatherGroup,
+                temperatureC = null,
                 timeOfDay = archived.timeOfDay,
                 // 기록에는 위치 이름이 없다(좌표 키만 남는다). 화면은 비면 감춘다.
                 locationLabel = "",
@@ -236,6 +240,7 @@ sealed interface PagesState {
 private fun ResolvedPage.toTodaysPage(
     currentYear: Int,
     weatherGroup: WeatherGroup,
+    temperatureC: Double?,
     timeOfDay: TimeOfDay,
     locationLabel: String,
     dateKey: String,
@@ -247,6 +252,7 @@ private fun ResolvedPage.toTodaysPage(
     section = entry.section,
     year = entry.year.toInt(),
     weatherGroup = weatherGroup,
+    temperatureC = temperatureC,
     timeOfDay = timeOfDay,
     locationLabel = locationLabel,
     dateKey = dateKey,

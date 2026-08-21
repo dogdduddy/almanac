@@ -55,6 +55,7 @@ class WeatherRepositoryTest {
         assertEquals(1, source.weatherCalls)
         assertEquals("37.57,126.98", conditions.locationKey)
         assertEquals(WeatherGroup.CLOUDY, conditions.weatherGroup)
+        assertEquals(27.7, conditions.temperatureC)
         assertTrue(!conditions.servedFromCache)
     }
 
@@ -108,6 +109,7 @@ class WeatherRepositoryTest {
         val result = repo.currentConditions(lat, lon)
         assertNotNull(result)
         assertEquals(WeatherGroup.CLOUDY, result.weatherGroup)
+        assertEquals(27.7, result.temperatureC)
         assertEquals(2, source.weatherCalls)
 
         // 신선도가 갱신됐으므로 다시 1시간 동안 조용해야 한다.
@@ -126,6 +128,7 @@ class WeatherRepositoryTest {
         val result = repo.currentConditions(lat, lon)
         assertNotNull(result)
         assertEquals(WeatherGroup.CLOUDY, result.weatherGroup)
+        assertEquals(27.7, result.temperatureC)
         assertTrue(result.servedFromCache)
     }
 

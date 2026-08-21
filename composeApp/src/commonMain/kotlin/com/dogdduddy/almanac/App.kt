@@ -1,6 +1,7 @@
 package com.dogdduddy.almanac
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
@@ -26,9 +28,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -36,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dogdduddy.almanac.billing.BillingProduct
+import com.dogdduddy.almanac.core.WeatherGroup
 import com.dogdduddy.almanac.location.Cities
 import com.dogdduddy.almanac.location.City
 import com.dogdduddy.almanac.location.LocationMode
@@ -44,6 +53,7 @@ import com.dogdduddy.almanac.resources.crimson_text
 import com.dogdduddy.almanac.weather.MetNorwayClient
 import org.jetbrains.compose.resources.Font
 import kotlin.math.absoluteValue
+import kotlin.math.roundToInt
 
 /** 화면이 그릴 상태. 플랫폼이 조립해서 넣어준다. */
 sealed interface AppState {
@@ -234,8 +244,7 @@ private fun PageBody(
             modifier = Modifier.fillMaxWidth(),
         )
 
-        Text(page.weatherPhrase, fontSize = 15.sp, fontFamily = Serif, color = Muted,
-            modifier = Modifier.padding(top = 6.dp))
+        WeatherMetaRow(page)
 
         Text(page.text, fontSize = 17.sp, lineHeight = 28.sp, fontFamily = Serif, color = Ink,
             modifier = Modifier.padding(top = 28.dp))
@@ -253,6 +262,190 @@ private fun PageBody(
                 onOpenPaywall = onOpenPaywall,
             )
         }
+    }
+}
+
+/**
+ * 문학적 한 줄을 먼저 읽고, 현재 날씨를 작은 보조 정보로 뒤에 붙인다.
+ *
+ * 과거 페이지에는 당시 기온을 저장하지 않으므로 아이콘까지만 그린다. 지금 기온을
+ * 과거 기록에 붙이면 잘못된 정보가 되기 때문이다.
+ */
+@Composable
+private fun WeatherMetaRow(page: TodaysPage) {
+    Row(
+        modifier = Modifier.padding(top = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(page.weatherPhrase, fontSize = 15.sp, fontFamily = Serif, color = Muted)
+        Text(
+            text = "·",
+            fontSize = 15.sp,
+            fontFamily = Serif,
+            color = Muted,
+            modifier = Modifier.padding(horizontal = 8.dp),
+        )
+        WeatherIcon(
+            weatherGroup = page.weatherGroup,
+            modifier = Modifier.size(width = 20.dp, height = 16.dp),
+        )
+        page.temperatureC.temperatureLabel()?.let { temperature ->
+            Text(
+                text = temperature,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+                fontFamily = Serif,
+                color = Ink,
+                modifier = Modifier.padding(start = 5.dp),
+            )
+        }
+    }
+}
+
+private fun Double?.temperatureLabel(): String? =
+    this?.takeIf { it.isFinite() }?.roundToInt()?.let { "$it°" }
+
+/** 플랫폼 이모지 대신 직접 그려 iOS와 Android의 모양·색을 동일하게 유지한다. */
+@Composable
+private fun WeatherIcon(weatherGroup: WeatherGroup, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        val lineWidth = 1.3.dp.toPx()
+        val stroke = Stroke(
+            width = lineWidth,
+            cap = StrokeCap.Round,
+            join = StrokeJoin.Round,
+        )
+        when (weatherGroup) {
+            WeatherGroup.CLEAR -> drawSunGlyph(Muted, stroke)
+            WeatherGroup.CLOUDY -> drawCloudGlyph(Muted, stroke, baseFraction = 0.76f)
+            WeatherGroup.FOG -> drawFogGlyph(Muted, lineWidth)
+            WeatherGroup.DRIZZLE -> {
+                drawCloudGlyph(Muted, stroke, baseFraction = 0.56f)
+                drawLine(Muted, Offset(size.width * 0.35f, size.height * 0.72f),
+                    Offset(size.width * 0.33f, size.height * 0.82f), lineWidth, StrokeCap.Round)
+                drawLine(Muted, Offset(size.width * 0.66f, size.height * 0.72f),
+                    Offset(size.width * 0.64f, size.height * 0.82f), lineWidth, StrokeCap.Round)
+            }
+            WeatherGroup.RAIN -> {
+                drawCloudGlyph(Muted, stroke, baseFraction = 0.56f)
+                listOf(0.29f, 0.50f, 0.71f).forEach { x ->
+                    drawLine(Muted, Offset(size.width * x, size.height * 0.70f),
+                        Offset(size.width * (x - 0.04f), size.height * 0.92f),
+                        lineWidth, StrokeCap.Round)
+                }
+            }
+            WeatherGroup.SNOW -> {
+                drawCloudGlyph(Muted, stroke, baseFraction = 0.54f)
+                drawSnowflakeGlyph(Offset(size.width * 0.34f, size.height * 0.82f), Muted, lineWidth)
+                drawSnowflakeGlyph(Offset(size.width * 0.68f, size.height * 0.82f), Muted, lineWidth)
+            }
+            WeatherGroup.THUNDER -> {
+                drawCloudGlyph(Muted, stroke, baseFraction = 0.54f)
+                val bolt = Path().apply {
+                    moveTo(size.width * 0.56f, size.height * 0.62f)
+                    lineTo(size.width * 0.43f, size.height * 0.80f)
+                    lineTo(size.width * 0.54f, size.height * 0.80f)
+                    lineTo(size.width * 0.45f, size.height * 0.98f)
+                    lineTo(size.width * 0.69f, size.height * 0.73f)
+                    lineTo(size.width * 0.57f, size.height * 0.73f)
+                }
+                drawPath(bolt, Muted, style = stroke)
+            }
+            WeatherGroup.WIND -> drawWindGlyph(Muted, stroke)
+        }
+    }
+}
+
+private fun DrawScope.drawCloudGlyph(color: Color, stroke: Stroke, baseFraction: Float) {
+    val w = size.width
+    val base = size.height * baseFraction
+    val cloud = Path().apply {
+        moveTo(w * 0.16f, base)
+        cubicTo(w * 0.05f, base, w * 0.03f, base * 0.67f, w * 0.18f, base * 0.62f)
+        cubicTo(w * 0.20f, base * 0.28f, w * 0.41f, base * 0.16f, w * 0.51f, base * 0.42f)
+        cubicTo(w * 0.62f, base * 0.27f, w * 0.78f, base * 0.37f, w * 0.80f, base * 0.58f)
+        cubicTo(w * 0.96f, base * 0.60f, w * 0.97f, base, w * 0.82f, base)
+        lineTo(w * 0.16f, base)
+        close()
+    }
+    drawPath(cloud, color, style = stroke)
+}
+
+private fun DrawScope.drawSunGlyph(color: Color, stroke: Stroke) {
+    val center = Offset(size.width * 0.50f, size.height * 0.50f)
+    val radius = size.minDimension * 0.20f
+    drawCircle(color, radius, center, style = stroke)
+    val rays = listOf(
+        floatArrayOf(0f, -1f), floatArrayOf(0.71f, -0.71f),
+        floatArrayOf(1f, 0f), floatArrayOf(0.71f, 0.71f),
+        floatArrayOf(0f, 1f), floatArrayOf(-0.71f, 0.71f),
+        floatArrayOf(-1f, 0f), floatArrayOf(-0.71f, -0.71f),
+    )
+    rays.forEach { direction ->
+        val inner = radius * 1.45f
+        val outer = radius * 1.95f
+        drawLine(
+            color = color,
+            start = Offset(center.x + direction[0] * inner, center.y + direction[1] * inner),
+            end = Offset(center.x + direction[0] * outer, center.y + direction[1] * outer),
+            strokeWidth = stroke.width,
+            cap = StrokeCap.Round,
+        )
+    }
+}
+
+private fun DrawScope.drawFogGlyph(color: Color, lineWidth: Float) {
+    val lines = listOf(
+        Triple(0.18f, 0.82f, 0.28f),
+        Triple(0.08f, 0.70f, 0.52f),
+        Triple(0.28f, 0.92f, 0.76f),
+    )
+    lines.forEach { (startX, endX, y) ->
+        drawLine(
+            color,
+            Offset(size.width * startX, size.height * y),
+            Offset(size.width * endX, size.height * y),
+            lineWidth,
+            StrokeCap.Round,
+        )
+    }
+}
+
+private fun DrawScope.drawWindGlyph(color: Color, stroke: Stroke) {
+    val paths = listOf(
+        Path().apply {
+            moveTo(size.width * 0.08f, size.height * 0.28f)
+            cubicTo(size.width * 0.30f, size.height * 0.18f, size.width * 0.56f, size.height * 0.42f,
+                size.width * 0.88f, size.height * 0.24f)
+        },
+        Path().apply {
+            moveTo(size.width * 0.18f, size.height * 0.52f)
+            cubicTo(size.width * 0.38f, size.height * 0.42f, size.width * 0.62f, size.height * 0.66f,
+                size.width * 0.94f, size.height * 0.48f)
+        },
+        Path().apply {
+            moveTo(size.width * 0.06f, size.height * 0.76f)
+            cubicTo(size.width * 0.28f, size.height * 0.67f, size.width * 0.48f, size.height * 0.85f,
+                size.width * 0.72f, size.height * 0.72f)
+        },
+    )
+    paths.forEach { drawPath(it, color, style = stroke) }
+}
+
+private fun DrawScope.drawSnowflakeGlyph(center: Offset, color: Color, lineWidth: Float) {
+    val radius = size.minDimension * 0.09f
+    listOf(
+        Offset(0f, radius),
+        Offset(radius * 0.87f, radius * 0.50f),
+        Offset(radius * 0.87f, -radius * 0.50f),
+    ).forEach { delta ->
+        drawLine(
+            color,
+            Offset(center.x - delta.x, center.y - delta.y),
+            Offset(center.x + delta.x, center.y + delta.y),
+            lineWidth,
+            StrokeCap.Round,
+        )
     }
 }
 
