@@ -46,8 +46,8 @@ targets:
       path: Almanac/Info.plist
       properties:
         CFBundleDisplayName: Almanac
-        CFBundleShortVersionString: "0.1.0"
-        CFBundleVersion: "1"
+        CFBundleShortVersionString: "0.3.0"
+        CFBundleVersion: "3"
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
@@ -140,8 +140,8 @@ targets:
         CFBundleDisplayName: Almanac
         # 앱과 버전이 같아야 한다. 다르면 content.db 복사 판단(버전 스탬프)이
         # 서로 어긋나 앱과 위젯이 번갈아 재복사한다.
-        CFBundleShortVersionString: "0.1.0"
-        CFBundleVersion: "1"
+        CFBundleShortVersionString: "0.3.0"
+        CFBundleVersion: "3"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
         # 번들 폰트 등록. 없으면 .custom(...) 이 **조용히 시스템 폰트로 폴백**한다 —
