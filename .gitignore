@@ -25,3 +25,6 @@ iosApp/AlmanacWidget/Resources/content.db
 
 # 실행 파일
 androidApp/release
+
+# 문서
+docs/*
