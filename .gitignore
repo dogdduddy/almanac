@@ -28,3 +28,7 @@ androidApp/release
 
 # 문서
 docs/*
+
+# 개인정보처리방침만 예외 — GitHub Pages 로 서비스한다.
+# 위치를 쓰는 앱이라 두 스토어 모두 등록에 이 URL 을 요구하므로 커밋되어야 한다.
+!docs/privacy/

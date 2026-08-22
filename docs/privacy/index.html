@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Almanac — Privacy Policy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Text:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #FBF9F4;
+    --ink: #1A1A1A;
+    --muted: #8A8378;
+    --rule: #E5E0D6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #14130F;
+      --ink: #EDE9E0;
+      --muted: #9A9184;
+      --rule: #2C2A24;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Crimson Text", Georgia, "Times New Roman", serif;
+    font-size: 19px;
+    line-height: 1.65;
+  }
+  main { max-width: 42rem; margin: 0 auto; padding: 4rem 1.5rem 6rem; }
+  h1 { font-size: 2.4rem; font-weight: 400; margin: 0 0 .25rem; letter-spacing: -.01em; }
+  .sub { color: var(--muted); margin: 0 0 3rem; }
+  h2 { font-size: 1.3rem; font-weight: 600; margin: 3rem 0 .75rem; }
+  p, li { margin: 0 0 1rem; }
+  ul { padding-left: 1.25rem; }
+  strong { font-weight: 600; }
+  a { color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
+  hr { border: 0; border-top: 1px solid var(--rule); margin: 3.5rem 0 2rem; }
+  .lede {
+    border-left: 2px solid var(--rule);
+    padding-left: 1.25rem;
+    margin: 0 0 2.5rem;
+  }
+  footer { color: var(--muted); font-size: .95rem; }
+  /* 좁은 화면에서 페이지 자체가 가로로 밀리지 않게, 표만 안에서 스크롤시킨다.
+     스토어 심사자가 휴대폰으로 열어보는 문서다. */
+  .table-wrap { overflow-x: auto; margin: 0 0 1.5rem; }
+  table { width: 100%; min-width: 26rem; border-collapse: collapse; }
+  th, td { text-align: left; padding: .6rem .5rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-weight: 600; }
+  @media (max-width: 30rem) {
+    body { font-size: 17px; }
+    main { padding: 2.5rem 1.25rem 4rem; }
+    h1 { font-size: 1.9rem; }
+  }
+</style>
+</head>
+<body>
+<main>
+
+  <h1>Privacy Policy</h1>
+  <p class="sub">Almanac · Last updated 22 August 2026</p>
+
+  <div class="lede">
+    <p>Almanac has no accounts, no sign-in, and no server of its own. It does not track you,
+    does not show ads, and contains no analytics or advertising software. Almost everything
+    it knows stays on your device.</p>
+  </div>
+
+  <p>This policy explains the little that does leave your device, and why.</p>
+
+  <h2>What stays on your device</h2>
+
+  <p>Almanac keeps a small private database inside the app’s own storage. Nothing in it is
+  uploaded anywhere. It holds:</p>
+
+  <ul>
+    <li>A random identifier created the first time you open the app. It is used only to pick
+      which passage you see, so that two people on the same day in the same weather do not
+      always get the same one. It is not tied to you, your device, or any account, and it is
+      never sent anywhere.</li>
+    <li>The passages you have read, with the date, the time of day, and the approximate
+      location they were chosen for.</li>
+    <li>A short-lived copy of the most recent weather, so the app does not ask for it again
+      every time you open it.</li>
+    <li>Which passage collections you own.</li>
+  </ul>
+
+  <p>The passages themselves ship inside the app. Reading them requires no network at all.</p>
+
+  <h2>What leaves your device</h2>
+
+  <div class="table-wrap">
+  <table>
+    <tr>
+      <th>Sent to</th>
+      <th>What</th>
+      <th>Why</th>
+    </tr>
+    <tr>
+      <td>MET Norway<br><span style="color:var(--muted)">api.met.no</span></td>
+      <td>An approximate location — coordinates rounded to about 1.1&nbsp;km</td>
+      <td>To look up the current weather, which decides the passage</td>
+    </tr>
+    <tr>
+      <td>RevenueCat, and Apple or Google</td>
+      <td>Purchase and receipt information, tied to an anonymous identifier</td>
+      <td>Only if you buy a collection — to confirm the purchase and restore it later</td>
+    </tr>
+  </table>
+  </div>
+
+  <p><strong>Your exact location is never sent.</strong> Coordinates are deliberately rounded
+  before any request, because the weather does not change over a city block and the app has no
+  reason to know where you are more precisely than that.</p>
+
+  <p>MET Norway is the Norwegian Meteorological Institute. Weather data is used under
+  <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. See their
+  <a href="https://www.met.no/en/About-us/privacy">privacy information</a>.</p>
+
+  <p>Purchases are handled by the App Store or Google Play; Almanac never sees your payment
+  details. Purchase state is managed through
+  <a href="https://www.revenuecat.com/privacy/">RevenueCat</a>, which receives an anonymous
+  identifier it generates itself — not your name, email, or Apple or Google account.</p>
+
+  <h2>Location is optional</h2>
+
+  <p>You can decline the location permission and use Almanac fully. If you do, choose a city
+  in the app instead and the weather is looked up for that city. You can change or revoke the
+  permission at any time in your device settings.</p>
+
+  <h2>What Almanac does not do</h2>
+
+  <ul>
+    <li>No advertising, and no advertising identifiers.</li>
+    <li>No analytics, usage tracking, or crash reporting.</li>
+    <li>No profiles, no behavioural targeting.</li>
+    <li>No selling or sharing of personal information.</li>
+    <li>No accounts, and no email address is ever asked for.</li>
+  </ul>
+
+  <p>The app stores each platform provides may collect their own diagnostics as part of app
+  distribution and payment. That is governed by Apple’s and Google’s policies, not this one.</p>
+
+  <h2>Children</h2>
+
+  <p>Almanac is not directed at children and collects no personal information from anyone,
+  including children.</p>
+
+  <h2>Keeping and deleting your data</h2>
+
+  <p>Everything Almanac stores is on your device, so <strong>deleting the app deletes all of
+  it.</strong> There is no server copy and no account to close. Purchases are held by the App
+  Store or Google Play and can be restored from the app if you reinstall.</p>
+
+  <h2>Changes</h2>
+
+  <p>If this policy changes, the date at the top of this page changes with it.</p>
+
+  <h2>Contact</h2>
+
+  <p>Questions about this policy, or about anything the app does with data:
+  <a href="mailto:dogdduddy@gmail.com">dogdduddy@gmail.com</a></p>
+
+  <hr>
+  <footer>
+    <p>Almanac is made by Byeongseon Jeon. Passages are taken from works in the public domain.
+    Weather data from MET Norway (api.met.no), licensed under CC BY 4.0.</p>
+  </footer>
+
+</main>
+</body>
+</html>
