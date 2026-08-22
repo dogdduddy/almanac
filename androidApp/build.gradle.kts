@@ -95,30 +95,39 @@ val checkReleaseBillingKey = tasks.register("checkReleaseBillingKey") {
     val testKey = (rootProject.findProperty("almanac.revenuecat.test") as String?)
         ?: local.getProperty("almanac.revenuecat.test").orEmpty()
 
-    // 실제로 앱에 실릴 키. shared 의 선택 규칙(실키 → test → 없음)과 같아야 한다.
     val bootstrap = (rootProject.findProperty("almanac.billing.bootstrap") as String?)
         ?.toBoolean() ?: false
 
-    // bootstrap 이면 composeApp 이 키를 아예 안 넣으므로 실릴 키도 없다.
-    val effectiveKey = if (bootstrap) "" else androidKey.ifBlank { testKey }
-
     doLast {
+        // bootstrap 이면 composeApp 이 키를 아예 안 넣는다. 결제 없는 빌드가 정상 결과다.
+        if (bootstrap) return@doLast
+
         // Test Store 키는 **어떤 경우에도** 릴리스에 실리면 안 된다.
         // SDK 가 프로덕션에서 크래시하고 심사에서 반려된다. 우회 플래그를 두지 않는다.
-        check(!effectiveKey.startsWith("test_")) {
+        check(!androidKey.startsWith("test_")) {
             "릴리스 빌드가 Test Store 키를 쓰려 한다.\n" +
                 "SDK 가 프로덕션에서 크래시하고 App Review 에서 반려된다.\n" +
                 "local.properties 에 almanac.revenuecat.android=goog_... 를 넣을 것."
         }
 
-        // 키가 아예 없으면 앱은 PreviewBilling 으로 떨어진다 — 크래시하지는 않지만
-        // 결제가 동작하지 않는다. 스토어에 앱을 처음 올려 패키지명을 등록하는 단계에서는
-        // 이게 정상 경로이므로, 의도를 명시하면 통과시킨다.
-        check(effectiveKey.isNotBlank() || bootstrap) {
-            "릴리스 빌드에 RevenueCat 키가 없다. 결제가 동작하지 않는 빌드가 나온다.\n" +
-                "키가 아직 없어 스토어 등록용으로 올리는 것이라면:\n" +
-                "  ./gradlew :androidApp:bundleRelease -Palmanac.billing.bootstrap=true"
+        // **형식까지 본다.** 비었는지만 보면 자리표시자(`goog_TODO`)를 통과시키는데,
+        // 런타임(selectBillingKey)은 그걸 못 쓸 키로 보고 Test Store 로 떨어진다.
+        // 게이트는 통과했는데 앱은 test 키로 도는, 이 게이트가 막으려던 바로 그 상태다.
+        // 규칙의 정본은 shared 의 BillingKeySelection.kt 다.
+        check(androidKey.startsWith("goog_") && androidKey.length - "goog_".length >= 20) {
+            if (androidKey.isBlank()) {
+                "릴리스 빌드에 RevenueCat 키가 없다. 결제가 동작하지 않는 빌드가 나온다.\n" +
+                    "키가 아직 없어 스토어 등록용으로 올리는 것이라면:\n" +
+                    "  ./gradlew :androidApp:bundleRelease -Palmanac.billing.bootstrap=true"
+            } else {
+                "almanac.revenuecat.android 가 RevenueCat 키 형식이 아니다.\n" +
+                    "goog_ 로 시작하고 뒤가 20자 이상이어야 한다. 자리표시자가 남아 있는지 확인할 것.\n" +
+                    "이대로 두면 런타임이 Test Store 키로 떨어져 프로덕션에서 크래시한다."
+            }
         }
+
+        // testKey 는 위 검사로 이미 배제됐다. 참조를 남겨 의도를 분명히 한다.
+        check(androidKey != testKey) { "android 키와 test 키가 같다." }
     }
 }
 

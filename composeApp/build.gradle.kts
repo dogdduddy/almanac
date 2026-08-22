@@ -79,6 +79,49 @@ val generateBillingKeys = tasks.register("generateBillingKeys") {
     }
 }
 
+/**
+ * 릴리스 iOS 빌드에 실제 RevenueCat 키가 있는지 검사한다.
+ *
+ * Android 는 `checkReleaseBillingKey` 가 assembleRelease/bundleRelease 를 막지만,
+ * iOS 는 Xcode 가 빌드를 주도해서 Gradle 이 스스로 끼어들 자리가 없다.
+ * 그래서 iosApp/project.yml 의 Release 전용 preBuildScript 가 이 태스크를 부른다
+ * (content.db 검증이 쓰는 방식과 같다).
+ *
+ * 막으려는 것은 Android 와 같다 — Test Store 키로 제출하면 SDK 가 프로덕션에서
+ * 크래시하고 App Review 에서 반려된다. 형식까지 보는 이유는
+ * 자리표시자(`appl_XXXXX`)가 실제로 들어 있었고, 그게 런타임에서 조용히
+ * Test Store 폴백으로 떨어졌기 때문이다. 규칙의 정본은 shared 의 BillingKeySelection.kt.
+ */
+val checkReleaseBillingKeyIos = tasks.register("checkReleaseBillingKeyIos") {
+    group = "verification"
+    description = "릴리스 iOS 빌드에 실제 RevenueCat 키가 있는지 검사한다"
+
+    val iosKey = revenueCatKeys["ios"].orEmpty()
+    val bootstrap = (findProperty("almanac.billing.bootstrap") as String?)?.toBoolean() ?: false
+
+    doLast {
+        if (bootstrap) return@doLast
+
+        check(!iosKey.startsWith("test_")) {
+            "릴리스 iOS 빌드가 Test Store 키를 쓰려 한다.\n" +
+                "SDK 가 프로덕션에서 크래시하고 App Review 에서 반려된다.\n" +
+                "local.properties 에 almanac.revenuecat.ios=appl_... 를 넣을 것."
+        }
+
+        check(iosKey.startsWith("appl_") && iosKey.length - "appl_".length >= 20) {
+            if (iosKey.isBlank()) {
+                "릴리스 iOS 빌드에 RevenueCat 키가 없다. 결제가 동작하지 않는 빌드가 나온다.\n" +
+                    "키가 아직 없어 스토어 등록용으로 올리는 것이라면:\n" +
+                    "  -Palmanac.billing.bootstrap=true"
+            } else {
+                "almanac.revenuecat.ios 가 RevenueCat 키 형식이 아니다.\n" +
+                    "appl_ 로 시작하고 뒤가 20자 이상이어야 한다. 자리표시자가 남아 있는지 확인할 것.\n" +
+                    "이대로 두면 런타임이 Test Store 키로 떨어져 프로덕션에서 크래시한다."
+            }
+        }
+    }
+}
+
 kotlin {
     jvmToolchain(21)
 
