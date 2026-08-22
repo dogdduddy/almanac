@@ -1,5 +1,7 @@
 package com.dogdduddy.almanac.location
 
+import com.dogdduddy.almanac.weather.LocationKey
+
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import com.dogdduddy.almanac.db.user.UserDatabase
 import kotlinx.coroutines.test.runTest
@@ -51,7 +53,7 @@ class LocationRepositoryTest {
         val resolved = repo.refresh()
         assertEquals(LocationMode.GPS, resolved.mode)
         assertEquals("London", resolved.label)
-        assertEquals(london, resolved.coordinates)
+        assertEquals(london.rounded(), resolved.coordinates)
     }
 
     /**
@@ -119,14 +121,41 @@ class LocationRepositoryTest {
     @Test
     fun useGpsWithoutPermissionKeepsCoordinates() = runTest {
         val tokyo = Cities.byId("tokyo")!!
+        val stored = tokyo.coordinates.rounded()
         repo.selectCity(tokyo)
         val afterSwitch = repo.useGps()
-        assertEquals(tokyo.coordinates, afterSwitch.coordinates)
+        assertEquals(stored, afterSwitch.coordinates)
 
         source.permission = false
-        assertEquals(tokyo.coordinates, repo.refresh().coordinates)
+        assertEquals(stored, repo.refresh().coordinates)
+    }
+
+    /**
+     * 저장되는 좌표는 소수점 2자리(≈1.1km)를 넘지 않는다.
+     *
+     * 이 테스트가 지키는 것은 캐시 적중률이 아니라 **개인정보처리방침의 문장**이다.
+     * "정밀한 위치를 보관하지 않는다" 고 공개한 이상, 코드가 그걸 어기면 문서가
+     * 거짓이 된다. 예전에는 MET 로 보내기 직전에만 반올림해서 DB 에는 GPS 원본이
+     * 남아 있었고, 안드로이드 자동 백업을 타고 클라우드로도 갔다.
+     */
+    @Test
+    fun storedCoordinatesAreRounded() = runTest {
+        source.permission = true
+        source.coordinates = Coordinates(37.566823456, 126.977512345)
+
+        val resolved = repo.refresh()
+        assertEquals(37.57, resolved.coordinates.latitude)
+        assertEquals(126.98, resolved.coordinates.longitude)
+
+        // 다시 읽어도 같아야 한다 — 저장 시점에 깎였다는 뜻이다.
+        val reread = repo.current().coordinates
+        assertEquals(37.57, reread.latitude)
+        assertEquals(126.98, reread.longitude)
     }
 }
+
+private fun Coordinates.rounded() =
+    Coordinates(LocationKey.round(latitude), LocationKey.round(longitude))
 
 class CitiesTest {
 

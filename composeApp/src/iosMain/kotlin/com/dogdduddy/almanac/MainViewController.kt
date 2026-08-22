@@ -54,6 +54,11 @@ fun MainViewController(): UIViewController = ComposeUIViewController {
         actions = AppActions(
             // iOS 위젯 추가는 홈 화면에서 직접 한다 — 앱이 띄울 수 있는 창구가 없다.
             onAddWidget = null,
+            onOpenPrivacy = {
+                platform.UIKit.UIApplication.sharedApplication.openURL(
+                    platform.Foundation.NSURL(string = Legal.PRIVACY_POLICY_URL)
+                )
+            },
             onSelectCity = { city ->
                 IosAlmanacGraph.service.selectCity(city)
                 load()

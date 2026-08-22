@@ -1,6 +1,7 @@
 package com.dogdduddy.almanac.location
 
 import com.dogdduddy.almanac.db.user.UserDatabase
+import com.dogdduddy.almanac.weather.LocationKey
 
 /**
  * 위치 해결과 저장.
@@ -35,8 +36,7 @@ class LocationRepository(
             label = Cities.DEFAULT.name,
             mode = LocationMode.DEFAULT,
         )
-        persist(fallback)
-        return fallback
+        return persist(fallback)
     }
 
     /**
@@ -60,15 +60,13 @@ class LocationRepository(
             label = Cities.nearest(coordinates)?.name ?: formatCoordinateLabel(coordinates),
             mode = LocationMode.GPS,
         )
-        persist(resolved)
-        return resolved
+        return persist(resolved)
     }
 
     /** 유저가 도시를 골랐다. 이후 GPS 는 이 선택을 덮지 않는다. */
     fun selectCity(city: City): ResolvedLocation {
         val resolved = ResolvedLocation(city.coordinates, city.name, LocationMode.MANUAL)
-        persist(resolved)
-        return resolved
+        return persist(resolved)
     }
 
     /**
@@ -80,17 +78,37 @@ class LocationRepository(
     fun useGps(): ResolvedLocation {
         val existing = current()
         val resolved = existing.copy(mode = LocationMode.GPS)
-        persist(resolved)
-        return resolved
+        return persist(resolved)
     }
 
-    private fun persist(location: ResolvedLocation) {
+    /**
+     * 저장 **전에** 좌표를 깎는다. 소수점 2자리 ≈ 1.1km.
+     *
+     * 예전에는 MET 로 보내기 직전에만 반올림하고 DB 에는 OS 가 준 정밀도를 그대로
+     * 넣었다. 그래서 "정밀한 위치는 보관하지 않는다" 고 말할 수 없었다 — 실제로는
+     * 집 앞마당 단위의 좌표가 기기에 남아 있었고, 안드로이드 자동 백업을 타면
+     * 그대로 클라우드로 갔다.
+     *
+     * 이보다 정밀할 이유가 어디에도 없다. MET 격자가 1~2.5km 이고, 도시 이름
+     * 표시와 캐시 키도 이 정밀도로 충분하다. 문장 선택 시드에는 좌표가 안 들어가므로
+     * **어떤 문장이 뽑히는지도 달라지지 않는다.**
+     */
+    private fun persist(location: ResolvedLocation): ResolvedLocation {
+        val stored = location.copy(
+            coordinates = Coordinates(
+                latitude = LocationKey.round(location.coordinates.latitude),
+                longitude = LocationKey.round(location.coordinates.longitude),
+            ),
+        )
         queries.upsertLocation(
-            latitude = location.coordinates.latitude,
-            longitude = location.coordinates.longitude,
-            label = location.label,
-            mode = location.mode.wire,
+            latitude = stored.coordinates.latitude,
+            longitude = stored.coordinates.longitude,
+            label = stored.label,
+            mode = stored.mode.wire,
             updated_at = nowEpochSeconds(),
         )
+        // 저장한 값을 그대로 돌려준다. 반환값과 DB 가 다르면 "무엇이 보관되는가" 를
+        // 코드로도 문서로도 말할 수 없게 된다.
+        return stored
     }
 }

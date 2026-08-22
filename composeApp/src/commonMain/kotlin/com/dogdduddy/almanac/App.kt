@@ -83,6 +83,13 @@ data class AppActions(
     val onPurchase: (BillingProduct) -> Unit = {},
     /** 스토어 정책상 복원은 반드시 제공해야 한다. */
     val onRestore: () -> Unit = {},
+    /**
+     * 개인정보처리방침을 브라우저로 연다.
+     *
+     * Apple 과 Google 모두 **앱 안에서 접근 가능한 링크**를 요구한다.
+     * 스토어 등록 페이지에만 URL 을 적어두는 것으로는 부족하다.
+     */
+    val onOpenPrivacy: (() -> Unit)? = null,
 )
 
 private enum class Screen { PAGES, CITIES, ABOUT, PAYWALL }
@@ -101,7 +108,10 @@ fun App(state: AppState, actions: AppActions = AppActions()) {
                     onBack = { screen = Screen.PAGES },
                 )
 
-                Screen.ABOUT -> AboutScreen(onBack = { screen = Screen.PAGES })
+                Screen.ABOUT -> AboutScreen(
+                    onBack = { screen = Screen.PAGES },
+                    onOpenPrivacy = actions.onOpenPrivacy,
+                )
 
                 Screen.PAYWALL -> PaywallScreen(
                     products = (state as? AppState.Ready)?.products.orEmpty(),
@@ -587,7 +597,7 @@ private fun CityScreen(
  * 그걸 주장이 아니라 **문서로** 보여주는 자리가 필요하다.
  */
 @Composable
-private fun AboutScreen(onBack: () -> Unit) {
+private fun AboutScreen(onBack: () -> Unit, onOpenPrivacy: (() -> Unit)?) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -613,6 +623,15 @@ private fun AboutScreen(onBack: () -> Unit) {
             "Typefaces",
             "Crimson Text, licensed under the SIL Open Font License 1.1.",
         )
+        onOpenPrivacy?.let {
+            Text(
+                "Privacy policy",
+                fontSize = 15.sp,
+                fontFamily = Serif,
+                color = Muted,
+                modifier = Modifier.padding(bottom = 48.dp).clickable(onClick = it),
+            )
+        }
     }
 }
 

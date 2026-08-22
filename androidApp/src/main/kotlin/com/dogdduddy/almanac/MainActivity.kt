@@ -33,6 +33,7 @@ class MainActivity : ComponentActivity() {
                 state = state,
                 actions = AppActions(
                     onAddWidget = ::requestPinWidget,
+                    onOpenPrivacy = ::openPrivacyPolicy,
                     onSelectCity = { city ->
                         AlmanacGraph.service(this).selectCity(city)
                         // 위치가 바뀌면 날씨도 문장도 바뀐다. 즉시 다시 그린다.
@@ -84,6 +85,18 @@ class MainActivity : ComponentActivity() {
                 is PagesState.Empty ->
                     AppState.Empty(result.reason, result.locationLabel, result.locationMode)
             }
+        }
+    }
+
+    /** 스토어 정책상 앱 안에서 개인정보처리방침에 닿을 수 있어야 한다. */
+    private fun openPrivacyPolicy() {
+        runCatching {
+            startActivity(
+                android.content.Intent(
+                    android.content.Intent.ACTION_VIEW,
+                    android.net.Uri.parse(com.dogdduddy.almanac.Legal.PRIVACY_POLICY_URL),
+                )
+            )
         }
     }
 

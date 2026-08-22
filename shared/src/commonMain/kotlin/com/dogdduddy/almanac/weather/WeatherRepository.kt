@@ -41,6 +41,8 @@ class WeatherRepository(
         val locationKey = LocationKey.format(latitude, longitude)
         val dateKey = clock.localDateKey(now)
 
+        pruneStaleCaches(now, dateKey)
+
         val snapshot = resolveWeather(latitude, longitude, locationKey, now)
             ?: return null
         val sun = resolveSun(latitude, longitude, locationKey, dateKey, now)
@@ -161,6 +163,26 @@ class WeatherRepository(
 
     /** 오래된 일출 캐시 정리. 앱 시작 시 한 번 부르면 된다. */
     fun pruneSunCache(beforeDateKey: String) = queries.pruneSunCache(beforeDateKey)
+
+    /**
+     * 지나간 장소의 캐시를 지운다. 날씨를 볼 때마다 부른다.
+     *
+     * `pruneSunCache` 는 만들어만 두고 **아무도 부르지 않았다.** 날씨 캐시는
+     * 정리 쿼리조차 없었다. 둘 다 위치별로 한 행씩 쌓이므로, 여행을 다니면
+     * 지나온 좌표가 기기에 영구히 남는다 — 캐시라고 이름 붙였을 뿐 이동 기록이다.
+     *
+     * 보관 기간을 짧게 두는 이유는 용량이 아니라 그것이다. 신선도 규칙이 1시간이라
+     * 하루만 지나도 캐시로서의 값은 없다.
+     */
+    private fun pruneStaleCaches(now: Long, dateKey: String) {
+        queries.pruneWeatherCache(now - CACHE_RETENTION_SECONDS)
+        queries.pruneSunCache(dateKey)
+    }
+
+    companion object {
+        /** 하루. 신선도 규칙이 1시간이므로 이보다 오래된 행은 캐시로서 값이 없다. */
+        const val CACHE_RETENTION_SECONDS: Long = 24 * 60 * 60
+    }
 }
 
 private fun com.dogdduddy.almanac.db.user.Weather_cache.toSnapshot() = WeatherSnapshot(
