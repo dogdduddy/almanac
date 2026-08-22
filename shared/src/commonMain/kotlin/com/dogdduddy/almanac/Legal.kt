@@ -11,9 +11,10 @@ package com.dogdduddy.almanac
 object Legal {
 
     /**
-     * GitHub Pages 로 서비스한다 (docs/privacy/index.html).
+     * 별도 공개 저장소의 GitHub Pages 로 서비스한다.
      *
-     * Pages 설정: Settings → Pages → Deploy from a branch → main / `/docs`
+     * 저장소: dogdduddy/almanac-privacy
+     * Pages 설정: Settings → Pages → Deploy from a branch → main / `/ (root)`
      */
-    const val PRIVACY_POLICY_URL = "https://dogdduddy.github.io/almanac/privacy/"
+    const val PRIVACY_POLICY_URL = "https://dogdduddy.github.io/almanac-privacy/"
 }

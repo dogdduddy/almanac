@@ -5,6 +5,7 @@ local.properties
 .idea/
 *.iml
 .DS_Store
+/almanac-privacy/
 /Key
 
 # Xcode
