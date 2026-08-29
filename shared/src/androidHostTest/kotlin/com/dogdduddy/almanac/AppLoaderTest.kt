@@ -25,6 +25,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -52,10 +53,11 @@ class AppLoaderTest {
     private lateinit var contentDriver: JdbcSqliteDriver
     private lateinit var userDriver: JdbcSqliteDriver
     private lateinit var service: AlmanacService
+    private lateinit var repository: AlmanacRepository
     private lateinit var entitlements: EntitlementSync
 
     private lateinit var location: BlockingLocationSource
-    private lateinit var billing: BlockingBilling
+    private lateinit var billing: Billing
     private lateinit var weather: StubWeatherSource
 
     private val states = mutableListOf<AppState>()
@@ -74,7 +76,7 @@ class AppLoaderTest {
         seedContent()
 
         val clock = FixedDeviceClock(now = NOW, dateKey = "2026-08-28", hour = 10, offset = "+09:00")
-        val repository = AlmanacRepository(content, user) { clock.nowEpochSeconds() }
+        repository = AlmanacRepository(content, user) { clock.nowEpochSeconds() }
 
         location = BlockingLocationSource()
         billing = BlockingBilling()
@@ -149,12 +151,7 @@ class AppLoaderTest {
         assertEquals(PageUnavailable.NO_WEATHER, last.reason)
     }
 
-    /**
-     * 스토어가 끝내 응답하지 않아도 화면은 멀쩡하고, 잃는 것은 업그레이드 진입점뿐이다.
-     *
-     * 상한이 실제로 걸려 있는지도 여기서 확인한다 — 걸려 있지 않으면 이 테스트는
-     * 가상 시간을 다 쓰고 멈추지 않는다.
-     */
+    /** 스토어가 끝내 응답하지 않아도 화면은 멀쩡하고, 잃는 것은 업그레이드 진입점뿐이다. */
     @Test
     fun `스토어가 응답하지 않아도 화면은 남고 상품만 빈다`() = runTest {
         loader().start()
@@ -165,6 +162,42 @@ class AppLoaderTest {
         assertIs<AppState.Ready>(last)
         assertTrue(last.products.isEmpty(), "못 받은 상품은 없는 것으로 둔다")
         assertTrue(last.pages.isNotEmpty())
+    }
+
+    /**
+     * 상한을 넘겨 도착한 응답은 버린다.
+     *
+     * 앞 테스트만으로는 상한이 걸려 있는지 알 수 없다 — 영영 안 오는 응답은 상한이
+     * 없어도 상품을 비워두기 때문이다. 여기서는 **오기는 오되 늦게** 오게 해서,
+     * 우리가 실제로 기다리기를 그만두는지 본다.
+     */
+    @Test
+    fun `상한을 넘겨 도착한 상품은 화면에 붙지 않는다`() = runTest {
+        billing = SlowBilling(AppLoaderDelays.OVER_LIMIT_MS)
+        entitlements = EntitlementSync(repository, billing)
+
+        loader().start()
+        location.complete(Coordinates(37.5665, 126.9780))
+        advanceUntilIdle()
+
+        val last = states.last()
+        assertIs<AppState.Ready>(last)
+        assertTrue(last.products.isEmpty(), "늦게 온 응답을 뒤늦게 붙이면 화면이 흔들린다")
+    }
+
+    /** 제때 오면 상품이 화면에 붙는다. 페이월 진입점이 이 값으로 열린다. */
+    @Test
+    fun `제때 온 상품은 화면에 붙는다`() = runTest {
+        billing = SlowBilling(AppLoaderDelays.WITHIN_LIMIT_MS)
+        entitlements = EntitlementSync(repository, billing)
+
+        loader().start()
+        location.complete(Coordinates(37.5665, 126.9780))
+        advanceUntilIdle()
+
+        val last = states.last()
+        assertIs<AppState.Ready>(last)
+        assertEquals(listOf("core-2026"), last.products.map { it.packId })
     }
 
     /**
@@ -263,6 +296,44 @@ private class BlockingBilling : Billing {
     override suspend fun entitledPackIds(): Set<String> = never.await()
     override suspend fun purchase(product: BillingProduct): PurchaseOutcome = never.await()
     override suspend fun restore(): Set<String> = never.await()
+}
+
+/** 늦게 답하는 결제 백엔드. 상한이 실제로 걸려 있는지 재는 데 쓴다. */
+private class SlowBilling(private val delayMs: Long) : Billing {
+
+    override suspend fun products(): List<BillingProduct> {
+        delay(delayMs)
+        return listOf(
+            BillingProduct(
+                packId = "core-2026",
+                productId = "com.dogdduddy.almanac.core2026",
+                title = "The 2026 Collection",
+                description = "테스트",
+                displayPrice = "₩5,900",
+            )
+        )
+    }
+
+    override suspend fun entitledPackIds(): Set<String> {
+        delay(delayMs)
+        return emptySet()
+    }
+
+    override suspend fun purchase(product: BillingProduct): PurchaseOutcome =
+        PurchaseOutcome.Cancelled
+
+    override suspend fun restore(): Set<String> = emptySet()
+}
+
+/**
+ * 상한 앞뒤의 지연.
+ *
+ * AppLoader 의 상한(10초)을 그대로 쓰지 않고 앞뒤 값만 둔다 — 테스트가 검증하는 것은
+ * "몇 초인가" 가 아니라 "상한을 넘기면 버리는가" 이므로, 상수를 따라다닐 이유가 없다.
+ */
+private object AppLoaderDelays {
+    const val WITHIN_LIMIT_MS = 1_000L
+    const val OVER_LIMIT_MS = 60_000L
 }
 
 /**
