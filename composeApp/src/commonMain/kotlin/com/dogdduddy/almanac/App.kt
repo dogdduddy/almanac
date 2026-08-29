@@ -55,26 +55,6 @@ import org.jetbrains.compose.resources.Font
 import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
 
-/** 화면이 그릴 상태. 플랫폼이 조립해서 넣어준다. */
-sealed interface AppState {
-    data object Loading : AppState
-
-    /** `pages[0]` 이 오늘. 뒤로 갈수록 과거다. */
-    data class Ready(
-        val pages: List<TodaysPage>,
-        val locationLabel: String,
-        val locationMode: LocationMode,
-        /** 살 수 있는 상품. 비어 있으면 페이월 진입점을 감춘다. */
-        val products: List<BillingProduct> = emptyList(),
-    ) : AppState
-
-    data class Empty(
-        val reason: PageUnavailable,
-        val locationLabel: String = "",
-        val locationMode: LocationMode = LocationMode.DEFAULT,
-    ) : AppState
-}
-
 /** 플랫폼이 처리하는 동작. */
 data class AppActions(
     val onAddWidget: (() -> Unit)? = null,
@@ -121,7 +101,7 @@ fun App(state: AppState, actions: AppActions = AppActions()) {
                 )
 
                 Screen.PAGES -> when (state) {
-                    is AppState.Loading -> Centered("…")
+                    is AppState.Loading -> OpeningScreen()
 
                     is AppState.Empty -> EmptyScreen(
                         reason = state.reason,
@@ -662,10 +642,30 @@ private fun ScreenHeader(title: String, onBack: () -> Unit) {
     }
 }
 
+/**
+ * 첫 프레임.
+ *
+ * 예전에는 가운데 점 세 개("…")뿐이었다. Paper 배경 위의 흐린 점 세 개는
+ * 스크린샷에서 **빈 흰 화면과 구분되지 않는다** — App Review 가 실제로 그렇게 봤고,
+ * 그것이 0.3.0 빌드 4 의 2.1(a) 반려 사유였다.
+ *
+ * [AppLoader] 가 이 화면을 지나가는 시간을 크게 줄였지만, 그렇다고 이 화면이
+ * 아무것도 아니어도 되는 것은 아니다. 짧게 스치더라도 **무엇을 여는 중인지** 말한다.
+ */
 @Composable
-private fun Centered(text: String) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(text, fontSize = 18.sp, fontFamily = Serif, color = Muted)
+private fun OpeningScreen() {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(28.dp),
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text("Almanac", fontSize = 34.sp, fontFamily = Serif, color = Ink)
+        Text(
+            text = "Finding today's sky…",
+            fontSize = 15.sp,
+            fontFamily = Serif,
+            color = Muted,
+            modifier = Modifier.padding(top = 10.dp),
+        )
     }
 }
 

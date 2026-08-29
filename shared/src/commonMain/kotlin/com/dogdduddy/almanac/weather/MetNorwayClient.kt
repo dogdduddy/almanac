@@ -2,6 +2,7 @@ package com.dogdduddy.almanac.weather
 
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
@@ -132,6 +133,10 @@ class MetNorwayClient(
 
         /** 앱 내 출처 표기 화면에 반드시 넣어야 하는 문구. */
         const val ATTRIBUTION = "Weather data from MET Norway (api.met.no), licensed under CC BY 4.0"
+
+        /** 응답까지의 상한. 넘기면 [WeatherFetch.Failed] 로 떨어져 캐시나 안내 화면이 받는다. */
+        const val REQUEST_TIMEOUT_MS = 10_000L
+        const val CONNECT_TIMEOUT_MS = 5_000L
     }
 }
 
@@ -148,6 +153,14 @@ fun createMetNorwayClient(nowEpochSeconds: () -> Long): MetNorwayClient =
             install(ContentNegotiation) {
                 // MET 은 우리가 안 쓰는 필드를 잔뜩 준다. 스키마가 늘어도 앱이 깨지면 안 된다.
                 json(Json { ignoreUnknownKeys = true })
+            }
+            // 상한을 명시한다. 기본값은 엔진 몫이고 iOS(NSURLSession)는 60초인데,
+            // 날씨 조회는 예보 한 건과 일출·일몰 한 건으로 **두 번** 나가므로 최악이 2분이다.
+            // 실패해도 캐시나 안내 화면으로 넘어가면 그만인 호출을 그렇게 붙들 이유가 없다.
+            install(HttpTimeout) {
+                requestTimeoutMillis = MetNorwayClient.REQUEST_TIMEOUT_MS
+                connectTimeoutMillis = MetNorwayClient.CONNECT_TIMEOUT_MS
+                socketTimeoutMillis = MetNorwayClient.REQUEST_TIMEOUT_MS
             }
         },
         nowEpochSeconds = nowEpochSeconds,

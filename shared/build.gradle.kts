@@ -61,7 +61,9 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            implementation(libs.kotlinx.coroutines.core)
+            // api 인 이유: AppLoader 의 생성자가 CoroutineScope 를 받는다.
+            // implementation 이면 조립 지점(Activity, MainViewController)에서 타입이 안 보인다.
+            api(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.sqldelight.runtime)
             implementation(libs.ktor.client.core)

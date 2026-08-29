@@ -12,7 +12,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import com.dogdduddy.almanac.widget.AlmanacWidgetReceiver
-import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -23,7 +22,26 @@ class MainActivity : ComponentActivity() {
      * 같은 경로로 페이지를 다시 불러온다 — 거부하면 저장된 도시로 그려진다.
      */
     private val requestLocation =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { load() }
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+            loader.locationPermissionSettled()
+        }
+
+    /**
+     * 시작 절차는 iOS 와 공유한다 (shared 의 [AppLoader]).
+     *
+     * 의존성을 함수로 넘기는 이유는 [AlmanacGraph.service] 가 첫 호출에서 DB 를 여는데,
+     * 그 일이 onCreate 의 메인 스레드에서 벌어지면 안 되기 때문이다 —
+     * 로더가 코루틴 안에서 처음 만진다.
+     */
+    private val loader by lazy {
+        AppLoader(
+            scope = lifecycleScope,
+            service = { AlmanacGraph.service(this) },
+            entitlements = { AlmanacGraph.entitlements(this) },
+            billing = { AlmanacGraph.billing },
+            onState = { state = it },
+        )
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -34,57 +52,23 @@ class MainActivity : ComponentActivity() {
                 actions = AppActions(
                     onAddWidget = ::requestPinWidget,
                     onOpenPrivacy = ::openPrivacyPolicy,
-                    onSelectCity = { city ->
-                        AlmanacGraph.service(this).selectCity(city)
-                        // 위치가 바뀌면 날씨도 문장도 바뀐다. 즉시 다시 그린다.
-                        load()
-                    },
-                    onUseGps = {
-                        AlmanacGraph.service(this).useGps()
-                        load()
-                    },
-                    onPurchase = { product ->
-                        lifecycleScope.launch {
-                            AlmanacGraph.entitlements(this@MainActivity).purchase(product)
-                            // 성공이든 실패든 다시 그린다 — 보유 팩이 바뀌면 문장도 바뀐다.
-                            load()
-                        }
-                    },
-                    onRestore = {
-                        lifecycleScope.launch {
-                            AlmanacGraph.entitlements(this@MainActivity).restore()
-                            load()
-                        }
-                    },
+                    // 위치가 바뀌면 날씨도 문장도 바뀐다. 로더가 즉시 다시 그린다.
+                    onSelectCity = loader::selectCity,
+                    onUseGps = loader::useGps,
+                    // 성공이든 실패든 다시 그린다 — 보유 팩이 바뀌면 문장도 바뀐다.
+                    onPurchase = loader::purchase,
+                    onRestore = loader::restore,
                 ),
             )
         }
 
+        // **화면부터 세우고 권한을 묻는다.** 순서가 반대면 프롬프트 뒤가 빈 화면이고,
+        // 유저가 답할 때까지 앱은 아무것도 아닌 것처럼 보인다.
+        loader.start()
+
         val source = com.dogdduddy.almanac.location.AndroidLocationSource(this)
         if (!source.hasPermission()) {
             requestLocation.launch(android.Manifest.permission.ACCESS_COARSE_LOCATION)
-        } else {
-            load()
-        }
-    }
-
-    private fun load() {
-        lifecycleScope.launch {
-            // 앱에서는 측위를 시도한다. 위젯과 달리 사용자를 잠시 기다리게 할 수 있다.
-            val service = AlmanacGraph.service(this@MainActivity)
-            // 결제 상태를 먼저 맞춘다. 보유 팩이 후보 집합을 바꾸므로 페이지보다 앞서야 한다.
-            AlmanacGraph.entitlements(this@MainActivity).sync()
-            val paywall = service.paywall(AlmanacGraph.billing)
-
-            state = when (val result = service.pages(refreshLocation = true)) {
-                is PagesState.Ready ->
-                    AppState.Ready(
-                        result.pages, result.locationLabel, result.locationMode, paywall.products,
-                    )
-
-                is PagesState.Empty ->
-                    AppState.Empty(result.reason, result.locationLabel, result.locationMode)
-            }
         }
     }
 
