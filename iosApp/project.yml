@@ -18,7 +18,7 @@ settings:
   base:
     SWIFT_VERSION: "5.0"
     ENABLE_USER_SCRIPT_SANDBOXING: NO   # Gradle 을 빌드 페이즈에서 돌려야 한다
-    DEVELOPMENT_TEAM: ""                # 시뮬레이터 빌드에는 불필요. 실기기 배포 시 채운다
+    DEVELOPMENT_TEAM: "7NARB43395"       # Apple Developer 배포 팀
 
 targets:
   Almanac:
@@ -47,7 +47,7 @@ targets:
       properties:
         CFBundleDisplayName: Almanac
         CFBundleShortVersionString: "0.3.0"
-        CFBundleVersion: "3"
+        CFBundleVersion: "5"
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
@@ -68,6 +68,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.dogdduddy.almanac
+        TARGETED_DEVICE_FAMILY: "1"
         CODE_SIGN_ENTITLEMENTS: Almanac/Almanac.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         FRAMEWORK_SEARCH_PATHS:
@@ -141,7 +142,7 @@ targets:
         # 앱과 버전이 같아야 한다. 다르면 content.db 복사 판단(버전 스탬프)이
         # 서로 어긋나 앱과 위젯이 번갈아 재복사한다.
         CFBundleShortVersionString: "0.3.0"
-        CFBundleVersion: "3"
+        CFBundleVersion: "5"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
         # 번들 폰트 등록. 없으면 .custom(...) 이 **조용히 시스템 폰트로 폴백**한다 —
@@ -152,6 +153,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.dogdduddy.almanac.widget
+        TARGETED_DEVICE_FAMILY: "1"
         CODE_SIGN_ENTITLEMENTS: AlmanacWidget/AlmanacWidget.entitlements
         # 위젯은 Compose 를 링크하지 않는다 — 익스텐션은 메모리 한도가 빡빡한데
         # Compose 를 통째로 들고 갈 이유가 없다. 도메인 로직만 있는 AlmanacKit 이면 된다.
