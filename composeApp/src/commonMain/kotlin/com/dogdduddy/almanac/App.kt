@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -21,6 +22,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
@@ -50,6 +52,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -74,6 +77,12 @@ data class AppActions(
     val onPurchase: (BillingProduct) -> Unit = {},
     /** 스토어 정책상 복원은 반드시 제공해야 한다. */
     val onRestore: () -> Unit = {},
+    /**
+     * 유저가 결제 결과를 확인하고 페이월을 닫았다.
+     *
+     * 이걸 비워두면 다음에 페이월을 열었을 때 지난번 결과가 그대로 남아 있다.
+     */
+    val onPurchaseAcknowledged: () -> Unit = {},
     /**
      * 개인정보처리방침을 브라우저로 연다.
      *
@@ -114,11 +123,16 @@ fun App(state: AppState, actions: AppActions = AppActions()) {
                     shelfNote = actions.shelfNote,
                 )
 
+                // **구매를 눌러도 여기서 화면을 닫지 않는다.** 예전에는 닫았고,
+                // 그래서 스토어 시트가 뜨기도 전에 페이월이 사라졌다 —
+                // 성공·취소·실패가 화면에서 완전히 같은 일이 되는 원인이었다.
+                // 이제 페이월이 결과를 받아 말한 뒤, 유저가 직접 닫는다.
                 Screen.PAYWALL -> PaywallScreen(
                     products = (state as? AppState.Ready)?.products.orEmpty(),
-                    onPurchase = { actions.onPurchase(it); screen = Screen.PAGES },
-                    onRestore = { actions.onRestore(); screen = Screen.PAGES },
-                    onBack = { screen = Screen.PAGES },
+                    purchase = state.purchase,
+                    onPurchase = actions.onPurchase,
+                    onRestore = actions.onRestore,
+                    onBack = { actions.onPurchaseAcknowledged(); screen = Screen.PAGES },
                 )
 
                 // 첫 화면(제목)에서 문장으로 넘어갈 때만 섞는다. 그 뒤 상태 갱신
@@ -839,6 +853,7 @@ private val Muted = Color(0xFF8A8378)
 @Composable
 private fun PaywallScreen(
     products: List<BillingProduct>,
+    purchase: PurchaseState,
     onPurchase: (BillingProduct) -> Unit,
     onRestore: () -> Unit,
     onBack: () -> Unit,
@@ -850,6 +865,21 @@ private fun PaywallScreen(
             .padding(horizontal = 28.dp),
     ) {
         ScreenHeader("The shelf", onBack)
+
+        if (purchase is PurchaseState.Unlocked) {
+            // 열렸으면 이 화면에 다른 할 말이 없다. 상품 목록을 그대로 두면
+            // 방금 산 것을 다시 파는 화면이 된다.
+            Section(
+                if (purchase.restored) "Your shelf is back" else "The shelf is open",
+                unlockedMessage(purchase),
+            )
+            Column(modifier = Modifier.padding(bottom = 48.dp)) {
+                PaywallButton("Start reading", onClick = onBack)
+            }
+            return@Column
+        }
+
+        val working = purchase is PurchaseState.Working
 
         Section(
             "What you have",
@@ -876,28 +906,143 @@ private fun PaywallScreen(
                         color = Ink,
                         modifier = Modifier.padding(top = 6.dp),
                     )
+                    Column(modifier = Modifier.padding(top = 18.dp)) {
+                        PaywallButton(
+                            label = when {
+                                working -> "Opening the store…"
+                                product.displayPrice != null -> "Buy · ${product.displayPrice}"
+                                else -> "Buy"
+                            },
+                            enabled = !working,
+                            onClick = { onPurchase(product) },
+                        )
+                    }
                     Text(
-                        text = product.displayPrice?.let { "$it · one time" } ?: "one time",
+                        text = "One time. Not a subscription.",
                         fontSize = 13.sp,
                         fontFamily = Serif,
                         color = Muted,
-                        modifier = Modifier
-                            .padding(top = 14.dp)
-                            .clickable { onPurchase(product) },
+                        modifier = Modifier.padding(top = 10.dp),
                     )
                 }
             }
         }
 
+        PurchaseNotice(purchase)
+
         // 스토어 정책상 반드시 있어야 한다. 기기를 바꾼 유저의 유일한 출구이기도 하다.
+        Column(modifier = Modifier.padding(bottom = 48.dp)) {
+            Text(
+                text = "Restore a previous purchase",
+                fontSize = 15.sp,
+                fontFamily = Serif,
+                color = Muted,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .clickable(enabled = !working, onClick = onRestore)
+                    .padding(vertical = 14.dp),
+            )
+        }
+    }
+}
+
+private fun unlockedMessage(state: PurchaseState.Unlocked): String = when {
+    state.restored && state.entryCount > 0 ->
+        "${state.entryCount} passages are back on your shelf. Nothing was charged."
+
+    state.restored ->
+        "Your previous purchase is back on the shelf. Nothing was charged."
+
+    state.entryCount > 0 ->
+        "${state.entryCount} passages are yours now — every weather, every hour of the day."
+
+    else ->
+        "The full collection is yours now — every weather, every hour of the day."
+}
+
+/**
+ * 결제 결과를 말하는 자리.
+ *
+ * 앱을 통틀어 알림 UI 가 이것 하나뿐인 것은 의도다. 결제는 페이월을 열어둔 채 끝나므로
+ * 할 말이 생기는 자리도 여기뿐이고, 스낵바나 토스트로 띄우면 화면 전환과 경쟁한다.
+ *
+ * [PurchaseState.Failed] 의 원문은 **싣지 않는다.** 스토어 SDK 메시지는 번역되지 않고
+ * 기술적이라("PurchasesTransactionException ...") 유저에게 보여줄 물건이 아니다.
+ * 유저가 알아야 하는 것은 '청구되지 않았다' 와 '다시 해도 된다' 두 가지다.
+ */
+@Composable
+private fun PurchaseNotice(purchase: PurchaseState) {
+    val title: String
+    val body: String
+    when (purchase) {
+        PurchaseState.Cancelled -> {
+            title = "Nothing was charged"
+            body = "The purchase was cancelled. Your free passages are unaffected."
+        }
+
+        PurchaseState.NothingToRestore -> {
+            title = "No purchase to restore"
+            body = "This store account has no previous purchase of the collection. " +
+                "If you bought it with a different account, sign in with that one and try again."
+        }
+
+        is PurchaseState.Failed -> {
+            title = "That did not go through"
+            body = "The store could not complete the purchase, and nothing was charged. " +
+                "You can try again."
+        }
+
+        else -> return
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 28.dp)
+            .background(Ink.copy(alpha = 0.05f), RoundedCornerShape(4.dp))
+            .padding(16.dp),
+    ) {
+        Text(title, fontSize = 13.sp, fontFamily = Serif, color = Muted)
         Text(
-            text = "Restore a previous purchase",
-            fontSize = 13.sp,
+            body,
+            fontSize = 15.sp,
+            lineHeight = 24.sp,
             fontFamily = Serif,
-            color = Muted,
-            modifier = Modifier
-                .padding(top = 8.dp, bottom = 48.dp)
-                .clickable(onClick = onRestore),
+            color = Ink,
+            modifier = Modifier.padding(top = 6.dp),
         )
     }
+}
+
+/**
+ * 페이월의 행동 하나.
+ *
+ * 예전에는 13sp 짜리 회색 가격 문자열에 `clickable` 이 달린 것이 전부였다. 게다가
+ * `padding` 이 `clickable` **앞**에 있어서 그 패딩조차 터치 영역이 아니었다 —
+ * 실제로 누를 수 있는 높이가 18dp 남짓이었고, 색까지 [Muted] 라 비활성 캡션으로 읽혔다.
+ *
+ * 여기서 `clickable` 을 `padding` 보다 **먼저** 두는 것은 취향이 아니다. 모디파이어는
+ * 바깥에서 안으로 감싸므로, 이 순서라야 패딩이 터치 영역 안에 들어온다.
+ */
+@Composable
+private fun PaywallButton(
+    label: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+) {
+    Text(
+        text = label,
+        fontSize = 17.sp,
+        fontFamily = Serif,
+        color = Paper,
+        textAlign = TextAlign.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .background(if (enabled) Ink else Muted, RoundedCornerShape(4.dp))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(vertical = 14.dp),
+    )
 }

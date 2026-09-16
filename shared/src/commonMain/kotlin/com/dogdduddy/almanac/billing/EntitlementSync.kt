@@ -52,9 +52,22 @@ class EntitlementSync(
         return outcome
     }
 
-    suspend fun restore(): Set<String> {
-        val restored = runCatching { billing.restore() }.getOrElse { emptySet() }
-        restored.forEach { repository.grantPack(it, PackSource.RESTORE) }
-        return repository.ownedPackIds().toSet()
+    /**
+     * 기기 변경·재설치 복원.
+     *
+     * 실패를 삼키지 않고 [RestoreOutcome.Failed] 로 올린다 — 예전에는 스토어 조회
+     * 실패도 빈 집합이었고, 화면은 그것을 "복원할 것이 없음" 과 똑같이 취급했다.
+     *
+     * **이미 가진 팩은 다시 지급하지 않는다.** 재지급은 획득 출처를 RESTORE 로 덮어써,
+     * 무료로 받은 스타터가 복원된 구매인 것처럼 기록된다.
+     */
+    suspend fun restore(): RestoreOutcome {
+        val before = repository.ownedPackIds().toSet()
+        val restored = runCatching { billing.restore() }
+            .getOrElse { return RestoreOutcome.Failed(it.message ?: "store unreachable") }
+
+        val added = restored - before
+        added.forEach { repository.grantPack(it, PackSource.RESTORE) }
+        return RestoreOutcome.Restored(added)
     }
 }

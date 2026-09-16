@@ -68,6 +68,16 @@ class AlmanacRepository(
     /** 환불·기기 변경 등으로 결제가 사라졌을 때 회수한다. */
     fun revokePack(packId: String) = userQueries.revokePack(packId)
 
+    /**
+     * 팩별 문장 수.
+     *
+     * 구매 확인이 "무엇이 열렸는지" 를 숫자로 말하는 데 쓴다. 상수로 적어두지 않는 이유는
+     * content.db 가 업데이트마다 통째로 교체되기 때문이다 — 그 숫자는 DB 에서만 참이다.
+     */
+    fun entryCountByPack(): Map<String, Int> =
+        contentQueries.countByPack().executeAsList()
+            .associate { it.pack_id to it.entry_count.toInt() }
+
     fun grantPack(packId: String, source: PackSource) {
         userQueries.grantPack(packId, nowEpochSeconds(), source.wire)
     }

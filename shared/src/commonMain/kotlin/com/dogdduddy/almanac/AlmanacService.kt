@@ -205,6 +205,17 @@ class AlmanacService(
         return PaywallInfo(products = products, canUpgrade = products.isNotEmpty())
     }
 
+    /**
+     * [packIds] 가 담고 있는 문장 수. 구매 확인 문구가 쓴다.
+     *
+     * 세지 못하면 0 을 돌려주고 화면이 숫자 없는 문구로 떨어진다 — 확인을 못 보여주는
+     * 것보다는 낫고, 틀린 숫자를 보여주는 것보다는 훨씬 낫다.
+     */
+    fun entryCount(packIds: Set<String>): Int {
+        val counts = runCatching { content.entryCountByPack() }.getOrElse { return 0 }
+        return packIds.sumOf { counts[it] ?: 0 }
+    }
+
     // ---- 위치 선택 -----------------------------------------------------------
 
     fun currentPlace(): ResolvedLocation = location.current()

@@ -22,6 +22,21 @@ sealed interface PurchaseOutcome {
 }
 
 /**
+ * 복원 결과.
+ *
+ * **"복원할 구매가 없었다" 와 "스토어에 못 물어봤다" 를 반드시 구분한다.**
+ * 둘 다 빈 집합으로 뭉개면, 비행기 안에서 복원을 누른 유료 유저에게 화면이
+ * "구매 내역이 없습니다" 라고 말한다. 환불 요청이 오는 경로가 정확히 이것이다.
+ */
+sealed interface RestoreOutcome {
+
+    /** [packIds] 는 **이번에 새로 붙은** 팩. 비어 있으면 복원할 구매가 없었다. */
+    data class Restored(val packIds: Set<String>) : RestoreOutcome
+
+    data class Failed(val message: String) : RestoreOutcome
+}
+
+/**
  * 결제 백엔드.
  *
  * 구현은 RevenueCat 하나지만 인터페이스로 끊는다.

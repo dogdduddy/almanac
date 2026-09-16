@@ -200,6 +200,156 @@ class AppLoaderTest {
         assertEquals(listOf("core-2026"), last.products.map { it.packId })
     }
 
+    // ---- 결제 결과 ---------------------------------------------------------
+    //
+    // 예전에는 이 구역이 통째로 없었다. 로더가 `runCatching { purchase(...) }` 로
+    // 결과와 예외를 동시에 버렸기 때문에 **검증할 것이 남지 않았다.**
+    // 성공·취소·실패가 화면에서 전부 같은 일이 된 것이 그래서다.
+
+    /** 성공은 화면에 남는다. 무엇이 열렸는지 숫자까지 말한다. */
+    @Test
+    fun `구매 성공은 열린 문장 수와 함께 화면에 남는다`() = runTest {
+        billing = ScriptedBilling(PurchaseOutcome.Purchased(setOf("core-2026")))
+        entitlements = EntitlementSync(repository, billing)
+        val loader = loader()
+
+        loader.start()
+        location.complete(Coordinates(37.5665, 126.9780))
+        advanceUntilIdle()
+
+        loader.purchase(paidProduct)
+        advanceUntilIdle()
+
+        // 마지막 상태여야 한다. loadProducts 가 뒤따라 상품을 비우면서
+        // 결과까지 덮어쓰면, 확인 문구는 떴다가 사라진다.
+        assertEquals(
+            PurchaseState.Unlocked(PAID_ENTRY_COUNT),
+            states.last().purchase,
+            "구매 확인은 마지막까지 화면에 남아야 한다",
+        )
+    }
+
+    /** 취소와 실패는 다른 일이다. 취소는 청구가 없었다고 말할 수 있어야 한다. */
+    @Test
+    fun `구매 취소는 실패와 구분된다`() = runTest {
+        billing = ScriptedBilling(PurchaseOutcome.Cancelled)
+        entitlements = EntitlementSync(repository, billing)
+        val loader = loader()
+
+        loader.start()
+        location.complete(Coordinates(37.5665, 126.9780))
+        advanceUntilIdle()
+
+        loader.purchase(paidProduct)
+        advanceUntilIdle()
+
+        assertEquals(PurchaseState.Cancelled, states.last().purchase)
+    }
+
+    /**
+     * 실패가 화면에 도달한다.
+     *
+     * **이게 이 묶음에서 가장 중요한 테스트다.** 결제가 안 됐는데 안 됐다는 말을
+     * 못 듣는 것이 원래 보고된 증상이었다.
+     */
+    @Test
+    fun `구매 실패는 화면에 남는다`() = runTest {
+        billing = ScriptedBilling(PurchaseOutcome.Failed("card declined"))
+        entitlements = EntitlementSync(repository, billing)
+        val loader = loader()
+
+        loader.start()
+        location.complete(Coordinates(37.5665, 126.9780))
+        advanceUntilIdle()
+
+        loader.purchase(paidProduct)
+        advanceUntilIdle()
+
+        assertEquals(PurchaseState.Failed("card declined"), states.last().purchase)
+    }
+
+    /** 스토어 시트가 뜨는 동안 화면이 그 사실을 안다. 버튼을 잠그는 근거다. */
+    @Test
+    fun `구매를 누르면 진행 상태가 결과보다 먼저 나간다`() = runTest {
+        billing = ScriptedBilling(PurchaseOutcome.Purchased(setOf("core-2026")))
+        entitlements = EntitlementSync(repository, billing)
+        val loader = loader()
+
+        loader.start()
+        location.complete(Coordinates(37.5665, 126.9780))
+        advanceUntilIdle()
+        val before = states.size
+
+        loader.purchase(paidProduct)
+        advanceUntilIdle()
+
+        val after = states.drop(before).map { it.purchase }
+        assertTrue(
+            after.indexOf(PurchaseState.Working) == 0,
+            "진행 표시가 없으면 유저는 두 번 누른다: $after",
+        )
+    }
+
+    /**
+     * 복원할 구매가 없는 것은 실패가 아니다.
+     *
+     * 예전에는 스토어 조회 실패도 빈 집합이었다. 그대로 화면에 붙였다면 비행기 안에서
+     * 복원을 누른 유료 유저가 "구매 내역이 없습니다" 를 봤을 것이다.
+     */
+    @Test
+    fun `복원할 것이 없으면 실패가 아니라 없음이다`() = runTest {
+        billing = ScriptedBilling(restorable = emptySet())
+        entitlements = EntitlementSync(repository, billing)
+        val loader = loader()
+
+        loader.start()
+        location.complete(Coordinates(37.5665, 126.9780))
+        advanceUntilIdle()
+
+        loader.restore()
+        advanceUntilIdle()
+
+        assertEquals(PurchaseState.NothingToRestore, states.last().purchase)
+    }
+
+    /** 복원은 청구가 없다. 화면이 구매와 다른 문구를 쓰려면 이 구분이 상태에 있어야 한다. */
+    @Test
+    fun `복원 성공은 구매와 구분된다`() = runTest {
+        billing = ScriptedBilling(restorable = setOf("core-2026"))
+        entitlements = EntitlementSync(repository, billing)
+        val loader = loader()
+
+        loader.start()
+        location.complete(Coordinates(37.5665, 126.9780))
+        advanceUntilIdle()
+
+        loader.restore()
+        advanceUntilIdle()
+
+        assertEquals(
+            PurchaseState.Unlocked(PAID_ENTRY_COUNT, restored = true),
+            states.last().purchase,
+        )
+    }
+
+    /** 확인하고 닫았으면 비운다. 안 비우면 다음에 페이월을 열 때 지난 실패가 그대로 있다. */
+    @Test
+    fun `결과를 확인하면 상태가 비워진다`() = runTest {
+        billing = ScriptedBilling(PurchaseOutcome.Failed("card declined"))
+        entitlements = EntitlementSync(repository, billing)
+        val loader = loader()
+
+        loader.start()
+        location.complete(Coordinates(37.5665, 126.9780))
+        advanceUntilIdle()
+
+        loader.purchase(paidProduct)
+        advanceUntilIdle()
+        loader.acknowledgePurchase()
+
+        assertEquals(PurchaseState.Idle, states.last().purchase)
+    }
+
     /**
      * 로더에게 **테스트 본문의 자식이 아닌** 스코프를 준다.
      *
@@ -222,6 +372,14 @@ class AppLoaderTest {
         )
     }
 
+    private val paidProduct = BillingProduct(
+        packId = "core-2026",
+        productId = "com.dogdduddy.almanac.core2026",
+        title = "The 2026 Collection",
+        description = "테스트",
+        displayPrice = "₩5,900",
+    )
+
     private fun seedContent() {
         contentDriver.execute(
             null,
@@ -229,27 +387,46 @@ class AppLoaderTest {
                 "VALUES ('base-2026', 'The Almanac', NULL, 1, 1, 0)",
             0,
         )
+        // 파는 팩. 자동 지급이 아니라 아무도 보유하지 않은 상태로 시작한다.
+        contentDriver.execute(
+            null,
+            "INSERT INTO packs (id, title, subtitle, is_base, auto_grant, sort_order) " +
+                "VALUES ('core-2026', 'The 2026 Collection', NULL, 1, 0, 1)",
+            0,
+        )
+
         var id = 1L
         for (group in WeatherGroup.entries) {
             for (timeOfDay in TimeOfDay.entries) {
                 insertEntry(id++, group, timeOfDay)
             }
         }
+
+        // 구매 확인이 말할 숫자. 화면이 "N passages" 를 어디서 얻는지가 이 값이다.
+        repeat(PAID_ENTRY_COUNT) {
+            insertEntry(id++, WeatherGroup.entries.first(), TimeOfDay.entries.first(), pack = "core-2026")
+        }
     }
 
-    private fun insertEntry(id: Long, group: WeatherGroup, timeOfDay: TimeOfDay) {
+    private fun insertEntry(
+        id: Long,
+        group: WeatherGroup,
+        timeOfDay: TimeOfDay,
+        pack: String = "base-2026",
+    ) {
         contentDriver.execute(
             null,
             """
             INSERT INTO entries (
                 id, pack_id, text, author, title, section, year, source_id, language,
                 time_of_day, tier, season_weight, temp_weight, word_count, license_note
-            ) VALUES (?, 'base-2026', ?, 'PLACEHOLDER', 'PLACEHOLDER', NULL, 1847,
+            ) VALUES (?, ?, ?, 'PLACEHOLDER', 'PLACEHOLDER', NULL, 1847,
                       'gutenberg-0', 'en', ?, 'A', NULL, NULL, 50, 'public domain')
             """.trimIndent(),
-            3,
+            4,
         ) {
-            bindLong(0, id); bindString(1, "placeholder entry $id"); bindString(2, timeOfDay.key)
+            bindLong(0, id); bindString(1, pack)
+            bindString(2, "placeholder entry $id"); bindString(3, timeOfDay.key)
         }
         contentDriver.execute(
             null,
@@ -262,6 +439,9 @@ class AppLoaderTest {
 
     private companion object {
         const val NOW = 1_787_000_000L
+
+        /** 유료 팩에 넣어둔 문장 수. 실제 앱의 342 자리에 오는 값이다. */
+        const val PAID_ENTRY_COUNT = 5
     }
 }
 
@@ -296,6 +476,32 @@ private class BlockingBilling : Billing {
     override suspend fun entitledPackIds(): Set<String> = never.await()
     override suspend fun purchase(product: BillingProduct): PurchaseOutcome = never.await()
     override suspend fun restore(): Set<String> = never.await()
+}
+
+/**
+ * 결과를 지정할 수 있는 결제 백엔드.
+ *
+ * 구매 결과가 화면까지 오는지 보려면 결과를 마음대로 정할 수 있어야 한다 —
+ * 나머지 가짜들은 전부 "느리다/안 온다" 만 흉내 낸다.
+ */
+private class ScriptedBilling(
+    private val outcome: PurchaseOutcome = PurchaseOutcome.Purchased(setOf("core-2026")),
+    private val restorable: Set<String> = emptySet(),
+) : Billing {
+
+    override suspend fun products(): List<BillingProduct> = listOf(
+        BillingProduct(
+            packId = "core-2026",
+            productId = "com.dogdduddy.almanac.core2026",
+            title = "The 2026 Collection",
+            description = "테스트",
+            displayPrice = "₩5,900",
+        )
+    )
+
+    override suspend fun entitledPackIds(): Set<String> = emptySet()
+    override suspend fun purchase(product: BillingProduct): PurchaseOutcome = outcome
+    override suspend fun restore(): Set<String> = restorable
 }
 
 /** 늦게 답하는 결제 백엔드. 상한이 실제로 걸려 있는지 재는 데 쓴다. */

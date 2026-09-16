@@ -119,15 +119,44 @@ class EntitlementSyncTest {
     fun restoreGrantsPreviousPurchases() = runTest {
         sync.sync()
         billing.restorable = setOf("core-2026")
-        assertTrue("core-2026" in sync.restore())
+
+        assertEquals(RestoreOutcome.Restored(setOf("core-2026")), sync.restore())
+        assertTrue("core-2026" in repo.ownedPackIds())
     }
 
+    /**
+     * **복원할 것이 없는 것과 스토어에 못 물어본 것은 다르다.**
+     *
+     * 예전에는 둘 다 빈 집합이었다. 그 상태로 화면에 결과를 붙이면, 비행기 안에서
+     * 복원을 누른 유료 유저가 "구매 내역이 없습니다" 를 보게 된다.
+     */
     @Test
-    fun restoreFailureDoesNotWipeExistingPacks() = runTest {
+    fun restoreFailureIsNotAnEmptyRestore() = runTest {
         billing.entitled = setOf("core-2026")
         sync.sync()
         billing.failRestore = true
-        assertTrue("core-2026" in sync.restore())
+
+        assertTrue(sync.restore() is RestoreOutcome.Failed)
+        assertTrue("core-2026" in repo.ownedPackIds(), "실패가 보유 팩을 지우면 안 된다")
+    }
+
+    /** 복원할 구매가 없었다. 실패가 아니라 빈 성공이다. */
+    @Test
+    fun restoreWithNothingToRestoreSucceedsEmpty() = runTest {
+        sync.sync()
+        billing.restorable = emptySet()
+
+        assertEquals(RestoreOutcome.Restored(emptySet()), sync.restore())
+    }
+
+    /** 이미 가진 팩을 다시 지급하면 획득 출처 기록이 RESTORE 로 덮인다. */
+    @Test
+    fun restoreDoesNotRegrantPacksAlreadyOwned() = runTest {
+        billing.entitled = setOf("core-2026")
+        sync.sync()
+        billing.restorable = setOf("core-2026")
+
+        assertEquals(RestoreOutcome.Restored(emptySet()), sync.restore())
     }
 
     /** 키가 없어도 앱은 돌아야 한다 — 무료 콘텐츠는 그대로. */

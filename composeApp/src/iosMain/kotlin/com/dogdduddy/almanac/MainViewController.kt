@@ -63,6 +63,7 @@ fun MainViewController(): UIViewController = ComposeUIViewController {
             onUseGps = loader::useGps,
             onPurchase = loader::purchase,
             onRestore = loader::restore,
+            onPurchaseAcknowledged = loader::acknowledgePurchase,
         ),
     )
 }

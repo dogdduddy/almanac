@@ -59,6 +59,7 @@ fun main() = application {
                 onUseGps = loader::useGps,
                 onPurchase = loader::purchase,
                 onRestore = loader::restore,
+                onPurchaseAcknowledged = loader::acknowledgePurchase,
                 shelfNote = "On this computer the shelf is the free starter. " +
                     "The full collection is bought and read on iPhone and Android.",
             ),

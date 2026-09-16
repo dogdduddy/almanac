@@ -71,6 +71,7 @@ class MainActivity : ComponentActivity() {
                     // 성공이든 실패든 다시 그린다 — 보유 팩이 바뀌면 문장도 바뀐다.
                     onPurchase = loader::purchase,
                     onRestore = loader::restore,
+                    onPurchaseAcknowledged = loader::acknowledgePurchase,
                 ),
             )
         }

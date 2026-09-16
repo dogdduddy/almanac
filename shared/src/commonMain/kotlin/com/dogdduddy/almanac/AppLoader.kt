@@ -3,6 +3,8 @@ package com.dogdduddy.almanac
 import com.dogdduddy.almanac.billing.Billing
 import com.dogdduddy.almanac.billing.BillingProduct
 import com.dogdduddy.almanac.billing.EntitlementSync
+import com.dogdduddy.almanac.billing.PurchaseOutcome
+import com.dogdduddy.almanac.billing.RestoreOutcome
 import com.dogdduddy.almanac.location.City
 import com.dogdduddy.almanac.location.LocationMode
 import kotlinx.coroutines.CoroutineScope
@@ -56,6 +58,13 @@ class AppLoader(
     /** 화면에 걸린 상품. 페이지를 다시 그려도 유지된다. */
     private var products: List<BillingProduct> = emptyList()
 
+    /**
+     * 화면에 걸린 결제 상태. [products] 와 같은 이유로 여기 든다 — [draw] 는
+     * 페이지만 갈아 끼우므로, 이 값을 들고 있지 않으면 구매 도중의 재그리기가
+     * 진행 표시와 결과를 지운다.
+     */
+    private var purchaseState: PurchaseState = PurchaseState.Idle
+
     /** 앱 시작. 한 번만 부른다. */
     fun start() {
         scope.launch {
@@ -90,19 +99,82 @@ class AppLoader(
     /** 위치 권한 응답이 왔다. 허용이든 거부든 같은 경로로 다시 그린다. */
     fun locationPermissionSettled() = redraw()
 
+    /**
+     * 구매를 시작하고 **결과를 화면에 남긴다.**
+     *
+     * 예전에는 `runCatching { entitlements().purchase(product) }` 한 줄이 반환값과
+     * 예외를 동시에 버렸다. 결제 백엔드는 성공·취소·실패를 제대로 갈라서 주는데
+     * 그것을 여기서 통째로 떨어뜨렸고, 화면에는 실어 보낼 자리조차 없었다.
+     * 결과적으로 세 경우가 전부 "페이월이 닫힌다" 로 똑같이 보였다.
+     *
+     * 세 줄의 순서에 각각 이유가 있다.
+     * - [draw] 가 **결과를 말하기 전에** 온다: 유저가 확인을 닫는 순간 새 서가가
+     *   이미 거기 있어야 한다. 뒤에 두면 확인을 닫고 나서 화면이 한 번 더 뒤집힌다
+     * - [loadProducts] 는 **결과를 말한 뒤에** 온다: 스토어 조회는 상한이 10초라,
+     *   앞에 두면 "구매됐다" 는 말이 최대 10초 늦는다
+     */
     fun purchase(product: BillingProduct) {
         scope.launch {
-            runCatching { entitlements().purchase(product) }
+            setPurchase(PurchaseState.Working)
+
+            val outcome = runCatching { entitlements().purchase(product) }
+                .getOrElse { PurchaseOutcome.Failed(it.message ?: "purchase failed") }
+
             draw(refreshLocation = true, countAsRead = true)
+            setPurchase(outcome.toPurchaseState())
             loadProducts()
         }
     }
 
+    /** 복원. 순서의 이유는 [purchase] 와 같다. */
     fun restore() {
         scope.launch {
-            runCatching { entitlements().restore() }
+            setPurchase(PurchaseState.Working)
+
+            val outcome = runCatching { entitlements().restore() }
+                .getOrElse { RestoreOutcome.Failed(it.message ?: "restore failed") }
+
             draw(refreshLocation = true, countAsRead = true)
+            setPurchase(outcome.toPurchaseState())
             loadProducts()
+        }
+    }
+
+    /**
+     * 유저가 결과를 확인하고 페이월을 닫았다.
+     *
+     * 이걸 부르지 않으면 다음에 페이월을 열었을 때 지난번 실패 문구가 그대로 있다.
+     */
+    fun acknowledgePurchase() = setPurchase(PurchaseState.Idle)
+
+    private fun PurchaseOutcome.toPurchaseState(): PurchaseState = when (this) {
+        is PurchaseOutcome.Purchased -> PurchaseState.Unlocked(countEntries(packIds))
+        PurchaseOutcome.Cancelled -> PurchaseState.Cancelled
+        is PurchaseOutcome.Failed -> PurchaseState.Failed(message)
+    }
+
+    private fun RestoreOutcome.toPurchaseState(): PurchaseState = when (this) {
+        // 빈 집합은 "복원할 구매가 없었다" 이지 실패가 아니다. 스토어 조회 실패는
+        // RestoreOutcome.Failed 로 따로 온다.
+        is RestoreOutcome.Restored ->
+            if (packIds.isEmpty()) PurchaseState.NothingToRestore
+            else PurchaseState.Unlocked(countEntries(packIds), restored = true)
+
+        is RestoreOutcome.Failed -> PurchaseState.Failed(message)
+    }
+
+    /** 이번에 열린 문장 수. 세지 못하면 0 이고 화면이 숫자 없는 문구로 떨어진다. */
+    private fun countEntries(packIds: Set<String>): Int =
+        runCatching { service().entryCount(packIds) }.getOrDefault(0)
+
+    /** 결제 상태만 갈아 끼운다. 페이지는 건드리지 않는다. */
+    private fun setPurchase(next: PurchaseState) {
+        purchaseState = next
+        when (val shown = current) {
+            is AppState.Ready -> emit(shown.copy(purchase = next))
+            is AppState.Empty -> emit(shown.copy(purchase = next))
+            // 아직 아무것도 못 그렸다. 곧 오는 draw 가 이 값을 싣는다.
+            AppState.Loading -> Unit
         }
     }
 
@@ -129,12 +201,14 @@ class AppLoader(
                     locationLabel = result.locationLabel,
                     locationMode = result.locationMode,
                     products = products,
+                    purchase = purchaseState,
                 )
 
                 is PagesState.Empty -> AppState.Empty(
                     reason = result.reason,
                     locationLabel = result.locationLabel,
                     locationMode = result.locationMode,
+                    purchase = purchaseState,
                 )
             }
         )
@@ -148,6 +222,7 @@ class AppLoader(
                 reason = PageUnavailable.NO_WEATHER,
                 locationLabel = place?.label.orEmpty(),
                 locationMode = place?.mode ?: LocationMode.DEFAULT,
+                purchase = purchaseState,
             )
         )
     }
