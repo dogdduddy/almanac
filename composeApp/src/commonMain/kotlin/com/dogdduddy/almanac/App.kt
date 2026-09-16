@@ -26,6 +26,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -93,8 +95,10 @@ private enum class Screen { PAGES, CITIES, ABOUT, PAYWALL }
 @Composable
 fun App(state: AppState, actions: AppActions = AppActions()) {
     var screen by remember { mutableStateOf(Screen.PAGES) }
+    val haptics = rememberPlatformHaptics()
 
     MaterialTheme {
+        CompositionLocalProvider(LocalHaptics provides haptics) {
         Box(modifier = Modifier.fillMaxSize().background(Paper)) {
             when (screen) {
                 Screen.CITIES -> CityScreen(
@@ -146,6 +150,7 @@ fun App(state: AppState, actions: AppActions = AppActions()) {
                 }
             }
         }
+        }
     }
 }
 
@@ -164,6 +169,16 @@ private fun Pages(
     onOpenPaywall: () -> Unit,
 ) {
     val pagerState = rememberPagerState(pageCount = { pages.size })
+
+    // 종이가 자리 잡는 순간 마른 소리 한 번. 첫 컴포지션(아직 넘기지 않음)은 제외한다.
+    val haptics = LocalHaptics.current
+    var lastSettled by remember { mutableStateOf(pagerState.settledPage) }
+    LaunchedEffect(pagerState.settledPage) {
+        if (pagerState.settledPage != lastSettled) {
+            lastSettled = pagerState.settledPage
+            haptics.play(PAGE_TURN_HAPTIC)
+        }
+    }
 
     HorizontalPager(
         state = pagerState,
@@ -240,10 +255,18 @@ private fun PageBody(
     onOpenPaywall: () -> Unit,
 ) {
     // 문장의 정체가 바뀌면(날씨가 바뀌어 다른 문장이 되는 등) 처음부터 다시 등장한다.
+    val words = remember(page.text) { splitWords(page.text) }
+    // **날씨가 바뀔 때 다시 등장한다. 문장이 갈릴 때가 아니다.**
+    //
+    // 시작 절차는 저장된 위치로 한 번 그리고, 측위가 끝나면 다시 그린다(AppLoader). 위치가
+    // 달라지면 슬롯도 달라져 **같은 하늘인데 다른 문장**이 온다. 문장의 정체를 키에 넣었더니
+    // 설치 후 첫 실행에서 등장이 통째로 두 번 재생됐다 — 실기에서 855ms 간격으로 확인했다.
+    // 등장은 날씨의 연출이므로 하늘이 그대로면 문장만 조용히 갈린다.
     val entrance = rememberWeatherEntrance(
-        key = "${page.dateKey}|${page.timeOfDay.key}|${page.weatherGroup.key}|${page.title}|${page.year}|${page.text.length}",
+        key = "${page.dateKey}|${page.timeOfDay.key}|${page.weatherGroup.key}",
         weatherGroup = page.weatherGroup,
         active = active,
+        wordCount = words.size,
     )
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -280,7 +303,7 @@ private fun PageBody(
             Box(modifier = Modifier.graphicsLayer { alpha = entrance.meta() }) { WeatherMetaRow(page) }
 
             PassageWords(
-                text = page.text,
+                words = words,
                 entrance = entrance,
                 modifier = Modifier.padding(top = 28.dp).fillMaxWidth(),
             )
@@ -319,10 +342,12 @@ private fun PageBody(
  * 실제 공백 글리프를 재서 쓴다 — 한 덩어리 Text 였을 때와 같은 조판이어야 한다.
  * 값은 전부 람다 안에서 읽으므로 프레임마다 재구성되지 않는다.
  */
+private fun splitWords(text: String): List<String> =
+    text.split(Regex("\\s+")).filter { it.isNotEmpty() }
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun PassageWords(text: String, entrance: WeatherEntrance, modifier: Modifier = Modifier) {
-    val words = remember(text) { text.split(Regex("\\s+")).filter { it.isNotEmpty() } }
+private fun PassageWords(words: List<String>, entrance: WeatherEntrance, modifier: Modifier = Modifier) {
     val style = TextStyle(
         fontSize = 17.sp,
         lineHeight = 28.sp,

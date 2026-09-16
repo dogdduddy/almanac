@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- 문장의 등장과 종이 넘김에 맞춘 햅틱. 없으면 vibrate() 가 SecurityException 을 던진다. -->
+
+    <uses-permission android:name="android.permission.VIBRATE" />
+
     <uses-permission android:name="android.permission.INTERNET" />
     <!--
       위치는 선택 사항이다. 거부해도 도시를 직접 고르면 앱이 온전히 동작한다.
