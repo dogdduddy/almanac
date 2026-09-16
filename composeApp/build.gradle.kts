@@ -8,11 +8,12 @@ plugins {
 }
 
 /**
- * 양 플랫폼이 공유하는 Compose Multiplatform UI.
+ * 세 플랫폼이 공유하는 Compose Multiplatform UI.
  *
  * AGP 9 부터 `com.android.application` 과 KMP 플러그인은 같은 모듈에 공존할 수 없다.
  * 그래서 Android 실행 모듈(:androidApp)은 순수 Android 로 두고,
- * 공유 UI 는 이 KMP 라이브러리에 모은다. iOS 는 여기서 나오는 프레임워크를 링크한다.
+ * 공유 UI 는 이 KMP 라이브러리에 모은다. iOS 는 여기서 나오는 프레임워크를 링크하고,
+ * 데스크톱(:desktopApp)은 jvm 변형을 문다.
  */
 /**
  * 공유 폰트. Crimson Text (SIL OFL).
@@ -144,6 +145,9 @@ kotlin {
         experimentalProperties["android.experimental.kmp.enableAndroidResources"] = true
     }
 
+    // 데스크톱(Windows/macOS/Linux). :desktopApp 이 이 JVM 변형을 문다.
+    jvm()
+
     // iosX64(인텔 시뮬레이터)는 뺀다 — Compose Multiplatform 1.11.x 가 해당 타깃 아티팩트를
     // 발행하지 않아 의존성 해석이 깨진다. 개발 머신이 Apple Silicon 이라 필요도 없다.
     listOf(
@@ -157,18 +161,36 @@ kotlin {
         }
     }
 
+    // 기본 계층(iosMain 등)을 명시적으로 깐 뒤에 소스셋을 하나 더 얹는다.
+    // 명시하지 않고 dependsOn 을 쓰면 Kotlin 이 기본 계층 적용을 건너뛰어 iosMain 이 사라진다.
+    applyDefaultHierarchyTemplate()
+
     sourceSets {
-        commonMain {
-            kotlin.srcDir(generateBillingKeys)
-        }
         commonMain.dependencies {
             api(projects.shared)
-            api(libs.revenuecat.core)
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)
             implementation(compose.ui)
             implementation(compose.components.resources)
         }
+
+        /**
+         * 결제는 모바일에서만 한다 — Android 와 iOS 가 공유하는 소스셋.
+         *
+         * RevenueCat KMP SDK 는 Android·iOS 아티팩트만 발행한다. commonMain 에 두면
+         * jvm 타깃의 의존성 해석이 통째로 실패한다 (iosX64 를 뺀 것과 같은 종류의 문제).
+         * 그래서 SDK 와 그것을 쓰는 코드, 빌드 때 생성되는 키까지 전부 여기로 내린다.
+         * 데스크톱은 shared 의 Billing 인터페이스만 보고 NoBilling 을 꽂는다.
+         */
+        val mobileMain by creating {
+            dependsOn(commonMain.get())
+            kotlin.srcDir(generateBillingKeys)
+            dependencies {
+                api(libs.revenuecat.core)
+            }
+        }
+        androidMain.get().dependsOn(mobileMain)
+        iosMain.get().dependsOn(mobileMain)
     }
 }

@@ -2,9 +2,11 @@ plugins {
     alias(libs.plugins.androidApplication) apply false
     alias(libs.plugins.androidKmpLibrary) apply false
     alias(libs.plugins.kotlinMultiplatform) apply false
+    alias(libs.plugins.kotlinJvm) apply false
     alias(libs.plugins.kotlinSerialization) apply false
     alias(libs.plugins.composeMultiplatform) apply false
     alias(libs.plugins.composeCompiler) apply false
+    alias(libs.plugins.composeHotReload) apply false
     alias(libs.plugins.sqldelight) apply false
 }
 
@@ -75,16 +77,18 @@ val updateContent = tasks.register<Copy>("updateContent") {
 }
 
 /**
- * 번들 사본 3개.
+ * 번들 사본 4개.
  *
- * **세 곳 모두에 넣어야 한다.** 위젯 익스텐션의 NSBundle.mainBundle 은 앱 번들이
+ * **네 곳 모두에 넣어야 한다.** 위젯 익스텐션의 NSBundle.mainBundle 은 앱 번들이
  * 아니므로 자기 리소스를 따로 갖는다. 앱만 갱신하면 콘텐츠를 새로 낸 뒤 위젯만
  * 구버전 DB 를 들고 있게 되고, 같은 순간에 앱과 위젯이 다른 문장을 그린다.
+ * 데스크톱은 클래스패스 리소스로 싣는다 — 실행 파일 안의 유일한 사본이다.
  */
 val contentBundleTargets = mapOf(
     "Android" to "androidApp/src/main/assets",
     "IosApp" to "iosApp/Almanac/Resources",
     "IosWidget" to "iosApp/AlmanacWidget/Resources",
+    "Desktop" to "desktopApp/src/main/resources",
 )
 
 val syncTasks = contentBundleTargets.map { (name, path) ->
@@ -97,22 +101,22 @@ val syncTasks = contentBundleTargets.map { (name, path) ->
     }
 }
 
-/** 세 번들에 한 번에. */
+/** 네 번들에 한 번에. */
 val syncContent = tasks.register("syncContent") {
     group = "almanac"
-    description = "content.db 를 앱·위젯 번들 세 곳에 반영한다"
+    description = "content.db 를 앱·위젯·데스크톱 번들 네 곳에 반영한다"
     dependsOn(syncTasks)
 }
 
 /**
- * 세 사본이 정본과 **바이트 단위로 같은지** 검사한다.
+ * 네 사본이 정본과 **바이트 단위로 같은지** 검사한다.
  *
  * 파일 존재만 보면 구버전 DB 를 들고 있는 번들을 못 잡는다 — 그게 정확히
  * 위젯만 옛 문장을 그리는 증상이다. 릴리스 빌드는 이걸 통과해야 한다.
  */
 val verifyContentDb = tasks.register("verifyContentDb") {
     group = "verification"
-    description = "번들 세 곳의 content.db 가 정본과 일치하는지 검사한다"
+    description = "번들 네 곳의 content.db 가 정본과 일치하는지 검사한다"
     dependsOn(syncContent)
 
     val canonical = canonicalContentDb.asFile

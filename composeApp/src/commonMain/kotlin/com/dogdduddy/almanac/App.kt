@@ -70,6 +70,13 @@ data class AppActions(
      * 스토어 등록 페이지에만 URL 을 적어두는 것으로는 부족하다.
      */
     val onOpenPrivacy: (() -> Unit)? = null,
+    /**
+     * 서가에 대해 플랫폼이 덧붙일 말. About 화면에 실린다.
+     *
+     * 데스크톱이 쓴다 — 결제가 없어 서가 진입점 자체가 감춰지므로, 전체 컬렉션이
+     * 어디에 있는지 말할 자리가 여기뿐이다. 모바일은 null.
+     */
+    val shelfNote: String? = null,
 )
 
 private enum class Screen { PAGES, CITIES, ABOUT, PAYWALL }
@@ -91,6 +98,7 @@ fun App(state: AppState, actions: AppActions = AppActions()) {
                 Screen.ABOUT -> AboutScreen(
                     onBack = { screen = Screen.PAGES },
                     onOpenPrivacy = actions.onOpenPrivacy,
+                    shelfNote = actions.shelfNote,
                 )
 
                 Screen.PAYWALL -> PaywallScreen(
@@ -577,7 +585,7 @@ private fun CityScreen(
  * 그걸 주장이 아니라 **문서로** 보여주는 자리가 필요하다.
  */
 @Composable
-private fun AboutScreen(onBack: () -> Unit, onOpenPrivacy: (() -> Unit)?) {
+private fun AboutScreen(onBack: () -> Unit, onOpenPrivacy: (() -> Unit)?, shelfNote: String? = null) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -603,6 +611,7 @@ private fun AboutScreen(onBack: () -> Unit, onOpenPrivacy: (() -> Unit)?) {
             "Typefaces",
             "Crimson Text, licensed under the SIL Open Font License 1.1.",
         )
+        shelfNote?.let { Section("The shelf", it) }
         onOpenPrivacy?.let {
             Text(
                 "Privacy policy",

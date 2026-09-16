@@ -48,6 +48,10 @@ kotlin {
         withHostTest {}
     }
 
+    // 데스크톱(Windows/macOS/Linux). :desktopApp 이 이 JVM 변형을 문다.
+    // Android 타깃도 JVM 이지만 Gradle 변형 속성(androidJvm vs jvm)으로 갈라지므로 충돌하지 않는다.
+    jvm()
+
     // :composeApp 과 타깃 집합을 맞춘다 (iosX64 제외 — 사유는 composeApp/build.gradle.kts 참고)
     listOf(
         iosArm64(),
@@ -81,6 +85,11 @@ kotlin {
         iosMain.dependencies {
             implementation(libs.sqldelight.native.driver)
             implementation(libs.ktor.client.darwin)
+        }
+        // 데스크톱은 호스트 테스트와 같은 JDBC 드라이버를 쓴다. 파일 DB 로 여는 점만 다르다.
+        jvmMain.dependencies {
+            implementation(libs.sqldelight.sqlite.driver)
+            implementation(libs.ktor.client.okhttp)
         }
         // DB 를 붙인 테스트는 JVM 호스트에서만 돈다. 인메모리 JDBC 드라이버를 쓴다.
         // 순수 로직(PageSelector)의 크로스플랫폼 동일성은 commonTest 가 이미 양쪽에서 검증한다.

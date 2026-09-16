@@ -3,6 +3,8 @@
 kotlin = "2.3.21"
 agp = "9.3.1"
 composeMultiplatform = "1.11.1"
+# 데스크톱 전용. 저장하면 창이 다시 그려진다 — 인터랙션 튜닝용. Maven Central 2026-09-16 기준 최신 안정.
+composeHotReload = "1.2.0"
 
 # --- androidx ---
 androidxActivityCompose = "1.13.0"
@@ -37,6 +39,8 @@ glance-material3 = { module = "androidx.glance:glance-material3", version.ref = 
 
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
+# 데스크톱의 Dispatchers.Main (Swing EDT). AppLoader 가 메인 디스패처를 요구한다.
+kotlinx-coroutines-swing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-swing", version.ref = "coroutines" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
 
 sqldelight-runtime = { module = "app.cash.sqldelight:runtime", version.ref = "sqldelight" }
@@ -57,7 +61,9 @@ revenuecat-core = { module = "com.revenuecat.purchases:purchases-kmp-core", vers
 androidApplication = { id = "com.android.application", version.ref = "agp" }
 androidKmpLibrary = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
 kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+kotlinJvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 composeMultiplatform = { id = "org.jetbrains.compose", version.ref = "composeMultiplatform" }
 composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+composeHotReload = { id = "org.jetbrains.compose.hot-reload", version.ref = "composeHotReload" }
 sqldelight = { id = "app.cash.sqldelight", version.ref = "sqldelight" }
