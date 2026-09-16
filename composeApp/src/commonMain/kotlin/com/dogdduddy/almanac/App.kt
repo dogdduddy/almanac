@@ -1,11 +1,15 @@
 package com.dogdduddy.almanac
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,16 +33,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -108,25 +117,32 @@ fun App(state: AppState, actions: AppActions = AppActions()) {
                     onBack = { screen = Screen.PAGES },
                 )
 
-                Screen.PAGES -> when (state) {
-                    is AppState.Loading -> OpeningScreen()
+                // 첫 화면(제목)에서 문장으로 넘어갈 때만 섞는다. 그 뒤 상태 갱신
+                // (측위, 상품)은 같은 페이지의 값만 바뀌므로 다시 섞지 않는다.
+                Screen.PAGES -> Crossfade(
+                    targetState = state is AppState.Loading,
+                    animationSpec = tween(350),
+                ) { opening ->
+                    when {
+                        opening || state is AppState.Loading -> OpeningScreen()
 
-                    is AppState.Empty -> EmptyScreen(
-                        reason = state.reason,
-                        locationLabel = state.locationLabel,
-                        onOpenCities = { screen = Screen.CITIES },
-                        onOpenAbout = { screen = Screen.ABOUT },
-                    )
+                        state is AppState.Empty -> EmptyScreen(
+                            reason = state.reason,
+                            locationLabel = state.locationLabel,
+                            onOpenCities = { screen = Screen.CITIES },
+                            onOpenAbout = { screen = Screen.ABOUT },
+                        )
 
-                    is AppState.Ready -> Pages(
-                        pages = state.pages,
-                        locationLabel = state.locationLabel,
-                        canUpgrade = state.products.isNotEmpty(),
-                        actions = actions,
-                        onOpenCities = { screen = Screen.CITIES },
-                        onOpenAbout = { screen = Screen.ABOUT },
-                        onOpenPaywall = { screen = Screen.PAYWALL },
-                    )
+                        state is AppState.Ready -> Pages(
+                            pages = state.pages,
+                            locationLabel = state.locationLabel,
+                            canUpgrade = state.products.isNotEmpty(),
+                            actions = actions,
+                            onOpenCities = { screen = Screen.CITIES },
+                            onOpenAbout = { screen = Screen.ABOUT },
+                            onOpenPaywall = { screen = Screen.PAYWALL },
+                        )
+                    }
                 }
             }
         }
@@ -166,6 +182,9 @@ private fun Pages(
                 // 푸터는 '맨 앞 페이지'의 것이다. 오늘 페이지가 없어도 도시 선택·구매
                 // 진입점은 있어야 하므로 page.isToday 가 아니라 위치로 판단한다.
                 isCurrent = index == 0,
+                // 등장은 페이지가 실제로 자리 잡았을 때 시작한다. 페이저가 옆 페이지를
+                // 미리 그릴 때 돌아버리면 넘겼을 때 이미 끝나 있다.
+                active = pagerState.settledPage == index,
                 locationLabel = locationLabel,
                 canUpgrade = canUpgrade,
                 actions = if (index == 0) actions else AppActions(),
@@ -212,6 +231,7 @@ private fun Modifier.pageTurn(pagerState: PagerState, page: Int): Modifier = gra
 private fun PageBody(
     page: TodaysPage,
     isCurrent: Boolean,
+    active: Boolean,
     locationLabel: String,
     canUpgrade: Boolean,
     actions: AppActions,
@@ -219,48 +239,134 @@ private fun PageBody(
     onOpenAbout: () -> Unit,
     onOpenPaywall: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 28.dp, vertical = 64.dp),
-    ) {
-        // 오늘 것만 날짜를 감춘다. 첫 페이지라도 오늘이 아니면 날짜를 보여줘야 한다.
-        if (!page.isToday) {
-            Text(page.dateKey, fontSize = 12.sp, fontFamily = Serif, color = Muted,
-                modifier = Modifier.padding(bottom = 12.dp))
+    // 문장의 정체가 바뀌면(날씨가 바뀌어 다른 문장이 되는 등) 처음부터 다시 등장한다.
+    val entrance = rememberWeatherEntrance(
+        key = "${page.dateKey}|${page.timeOfDay.key}|${page.weatherGroup.key}|${page.title}|${page.year}|${page.text.length}",
+        weatherGroup = page.weatherGroup,
+        active = active,
+    )
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 28.dp, vertical = 64.dp),
+        ) {
+            // 오늘 것만 날짜를 감춘다. 첫 페이지라도 오늘이 아니면 날짜를 보여줘야 한다.
+            if (!page.isToday) {
+                Text(page.dateKey, fontSize = 12.sp, fontFamily = Serif, color = Muted,
+                    modifier = Modifier.padding(bottom = 12.dp).graphicsLayer { alpha = entrance.meta() })
+            }
+
+            // 주인공. 문장보다 먼저, 같은 방식으로 등장한다.
+            Text(
+                text = "${page.yearsAgo} years ago",
+                fontSize = 44.sp,
+                lineHeight = 50.sp,
+                fontWeight = FontWeight.Normal,
+                fontFamily = Serif,
+                color = Ink,
+                modifier = Modifier.fillMaxWidth().graphicsLayer {
+                    val pose = entrance.hero()
+                    translationX = pose.dx * density
+                    translationY = pose.dy * density
+                    rotationZ = pose.rotation
+                    alpha = pose.alpha
+                    renderEffect = entrance.blurEffect(density)
+                },
+            )
+
+            Box(modifier = Modifier.graphicsLayer { alpha = entrance.meta() }) { WeatherMetaRow(page) }
+
+            PassageWords(
+                text = page.text,
+                entrance = entrance,
+                modifier = Modifier.padding(top = 28.dp).fillMaxWidth(),
+            )
+
+            Text(page.attribution, fontSize = 13.sp, fontFamily = Serif, color = Muted,
+                modifier = Modifier.padding(top = 20.dp).graphicsLayer { alpha = entrance.meta() })
+
+            if (isCurrent) {
+                Box(modifier = Modifier.graphicsLayer { alpha = entrance.meta() }) {
+                    Footer(
+                        locationLabel = locationLabel,
+                        canUpgrade = canUpgrade,
+                        actions = actions,
+                        onOpenCities = onOpenCities,
+                        onOpenAbout = onOpenAbout,
+                        onOpenPaywall = onOpenPaywall,
+                    )
+                }
+            }
         }
 
-        // 주인공.
-        Text(
-            text = "${page.yearsAgo} years ago",
-            fontSize = 44.sp,
-            lineHeight = 50.sp,
-            fontWeight = FontWeight.Normal,
-            fontFamily = Serif,
-            color = Ink,
-            modifier = Modifier.fillMaxWidth(),
+        // 뇌우의 섬광. 종이 전체를 덮는다. 다른 날씨에서는 알파 0 이라 그리지 않는 것과 같다.
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .graphicsLayer { alpha = entrance.flash() }
+                .background(Color.White),
         )
+    }
+}
 
-        WeatherMetaRow(page)
+/**
+ * 문장을 단어 단위로 놓는다. 단어마다 자기 자세(graphicsLayer)를 가진다.
+ *
+ * 하나의 Text 로는 단어를 따로 움직일 수 없어 FlowRow 로 줄바꿈한다. 띄어쓰기 폭은
+ * 실제 공백 글리프를 재서 쓴다 — 한 덩어리 Text 였을 때와 같은 조판이어야 한다.
+ * 값은 전부 람다 안에서 읽으므로 프레임마다 재구성되지 않는다.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PassageWords(text: String, entrance: WeatherEntrance, modifier: Modifier = Modifier) {
+    val words = remember(text) { text.split(Regex("\\s+")).filter { it.isNotEmpty() } }
+    val style = TextStyle(
+        fontSize = 17.sp,
+        lineHeight = 28.sp,
+        fontFamily = Serif,
+        color = Ink,
+        // 단어마다 한 줄짜리 Text 라 기본 트리밍이 첫 줄 위·마지막 줄 아래를 잘라
+        // 행 높이가 22dp 로 줄어든다. 자르지 않아야 한 덩어리였을 때의 28dp 가 유지된다.
+        lineHeightStyle = LineHeightStyle(
+            alignment = LineHeightStyle.Alignment.Center,
+            trim = LineHeightStyle.Trim.None,
+        ),
+    )
+    val measurer = rememberTextMeasurer()
+    // 이름을 달리 둔다 — graphicsLayer 람다 안의 density(Float) 를 가리면 안 된다.
+    val localDensity = LocalDensity.current
+    val space = remember(style, localDensity) {
+        with(localDensity) { measurer.measure(" ", style).size.width.toDp() }
+            .takeIf { it > 0.dp } ?: (17 * 0.28f).dp
+    }
 
-        Text(page.text, fontSize = 17.sp, lineHeight = 28.sp, fontFamily = Serif, color = Ink,
-            modifier = Modifier.padding(top = 28.dp))
-
-        Text(page.attribution, fontSize = 13.sp, fontFamily = Serif, color = Muted,
-            modifier = Modifier.padding(top = 20.dp))
-
-        if (isCurrent) {
-            Footer(
-                locationLabel = locationLabel,
-                canUpgrade = canUpgrade,
-                actions = actions,
-                onOpenCities = onOpenCities,
-                onOpenAbout = onOpenAbout,
-                onOpenPaywall = onOpenPaywall,
+    FlowRow(
+        modifier = modifier.graphicsLayer { renderEffect = entrance.blurEffect(density) },
+        horizontalArrangement = Arrangement.spacedBy(space),
+    ) {
+        words.forEachIndexed { index, word ->
+            Text(
+                text = word,
+                style = style,
+                modifier = Modifier.graphicsLayer {
+                    val pose = entrance.word(index, words.size)
+                    translationX = pose.dx * density
+                    translationY = pose.dy * density
+                    rotationZ = pose.rotation
+                    alpha = pose.alpha
+                },
             )
         }
     }
+}
+
+/** 안개의 흐림. 반지름이 사실상 0 이면 효과를 걸지 않는다 — 레이어 비용을 아낀다. */
+private fun WeatherEntrance.blurEffect(density: Float): BlurEffect? {
+    val radius = blur() * density
+    return if (radius > 0.3f) BlurEffect(radius, radius, TileMode.Decal) else null
 }
 
 /**

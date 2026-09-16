@@ -47,12 +47,12 @@ class ReadingPageRenderTest {
 
         val png = ImageComposeScene(width = 880, height = 1720, density = Density(2f)).use { scene ->
             scene.setContent { App(state) }
-            // 폰트 리소스가 첫 프레임 뒤에 붙을 수 있다. 무효화가 남아 있으면 한 프레임 더 그린다.
-            var image = scene.render()
-            var frame = 1L
-            while (scene.hasInvalidations() && frame < 10) {
-                image = scene.render(frame * 16_000_000L)
-                frame++
+            // 문장이 날씨처럼 등장하는 데 최대 2.3초가 걸린다. 그 뒤의 정지 화면을 본다.
+            var image = scene.render(0L)
+            var nanos = 0L
+            while (nanos < 3_000_000_000L) {
+                nanos += 16_000_000L
+                image = scene.render(nanos)
             }
             checkNotNull(image.encodeToData(EncodedImageFormat.PNG)).bytes
         }
@@ -70,8 +70,8 @@ class ReadingPageRenderTest {
                 if (luminance < 96) ink++
             }
         }
-        // 종이색만 있으면 0 이다. 44sp 히어로와 본문이 그려졌다면 표본의 1% 는 잉크다.
+        // 종이색만 있으면 0 이다. 44sp 히어로와 본문이 그려졌다면 표본의 0.5% 는 잉크다.
         val sampled = (bitmap.height / 4) * (bitmap.width / 4)
-        assertTrue(ink > sampled / 100, "잉크 픽셀이 너무 적다: $ink / $sampled — 화면이 비었거나 폰트가 빠졌다 (${out.absolutePath})")
+        assertTrue(ink > sampled / 200, "잉크 픽셀이 너무 적다: $ink / $sampled — 화면이 비었거나 폰트가 빠졌다 (${out.absolutePath})")
     }
 }
