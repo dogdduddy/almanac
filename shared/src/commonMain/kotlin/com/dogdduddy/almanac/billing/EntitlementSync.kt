@@ -47,7 +47,19 @@ class EntitlementSync(
     suspend fun purchase(product: BillingProduct): PurchaseOutcome {
         val outcome = billing.purchase(product)
         if (outcome is PurchaseOutcome.Purchased) {
-            outcome.packIds.forEach { repository.grantPack(it, PackSource.PURCHASE) }
+            // 거래가 끝났다는 사실과 약속한 콘텐츠가 열렸다는 사실은 다르다.
+            // RevenueCat 상품-entitlement 연결이 빠졌거나 다른 Billing 구현이 잘못된
+            // 결과를 주더라도, 구매한 상품의 packId 가 확인되기 전에는 성공으로 말하지 않는다.
+            if (product.packId !in outcome.packIds) {
+                return PurchaseOutcome.Failed(
+                    "purchased product did not activate entitlement: ${product.packId}"
+                )
+            }
+
+            // Billing 이 현재 활성 entitlement 전체를 돌려주더라도 이번 상품만 지급한다.
+            // 무관한 ID 를 content.db 에 넣다가 구매 완료 뒤 실패하는 일을 막는다.
+            repository.grantPack(product.packId, PackSource.PURCHASE)
+            return PurchaseOutcome.Purchased(setOf(product.packId))
         }
         return outcome
     }

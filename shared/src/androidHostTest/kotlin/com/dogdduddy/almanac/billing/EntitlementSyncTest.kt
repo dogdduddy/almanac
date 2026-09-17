@@ -114,6 +114,29 @@ class EntitlementSyncTest {
         assertTrue("core-2026" !in repo.ownedPackIds())
     }
 
+    /** 거래 응답이 와도 약속한 entitlement 가 없으면 성공으로 말하면 안 된다. */
+    @Test
+    fun purchaseWithoutExpectedEntitlementFailsWithoutGranting() = runTest {
+        sync.sync()
+        billing.purchaseOutcome = PurchaseOutcome.Purchased(emptySet())
+
+        assertTrue(sync.purchase(fullPack) is PurchaseOutcome.Failed)
+        assertTrue("core-2026" !in repo.ownedPackIds())
+    }
+
+    /** 현재 활성 entitlement 전체가 와도 이번에 산 팩 외에는 로컬에 지급하지 않는다. */
+    @Test
+    fun purchaseGrantsOnlyThePurchasedPack() = runTest {
+        sync.sync()
+        billing.purchaseOutcome = PurchaseOutcome.Purchased(setOf("core-2026", "other-app-pro"))
+
+        assertEquals(
+            PurchaseOutcome.Purchased(setOf("core-2026")),
+            sync.purchase(fullPack),
+        )
+        assertEquals(setOf("starter-2026", "core-2026"), repo.ownedPackIds().toSet())
+    }
+
     /** 스토어 정책상 복원은 반드시 제공해야 한다. */
     @Test
     fun restoreGrantsPreviousPurchases() = runTest {
@@ -173,6 +196,7 @@ private class FakeBilling : Billing {
     var failEntitlements = false
     var failRestore = false
     var cancelNext = false
+    var purchaseOutcome: PurchaseOutcome? = null
 
     override suspend fun products() = emptyList<BillingProduct>()
 
@@ -186,6 +210,7 @@ private class FakeBilling : Billing {
             cancelNext = false
             return PurchaseOutcome.Cancelled
         }
+        purchaseOutcome?.let { return it }
         entitled = entitled + product.packId
         return PurchaseOutcome.Purchased(setOf(product.packId))
     }

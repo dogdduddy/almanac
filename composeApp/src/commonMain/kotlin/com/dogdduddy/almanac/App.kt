@@ -989,9 +989,9 @@ private fun PurchaseNotice(purchase: PurchaseState) {
         }
 
         is PurchaseState.Failed -> {
-            title = "That did not go through"
-            body = "The store could not complete the purchase, and nothing was charged. " +
-                "You can try again."
+            title = "We could not confirm access"
+            body = "Check your store purchase history, then try Restore. " +
+                "If the purchase appears there, you will not need to buy it again."
         }
 
         else -> return

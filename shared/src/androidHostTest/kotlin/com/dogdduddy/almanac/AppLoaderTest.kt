@@ -268,6 +268,24 @@ class AppLoaderTest {
         assertEquals(PurchaseState.Failed("card declined"), states.last().purchase)
     }
 
+    /** 스토어 거래 뒤 예상 entitlement 가 없으면 성공 화면을 보여주지 않는다. */
+    @Test
+    fun `구매 상품이 열리지 않았으면 성공으로 표시하지 않는다`() = runTest {
+        billing = ScriptedBilling(PurchaseOutcome.Purchased(emptySet()))
+        entitlements = EntitlementSync(repository, billing)
+        val loader = loader()
+
+        loader.start()
+        location.complete(Coordinates(37.5665, 126.9780))
+        advanceUntilIdle()
+
+        loader.purchase(paidProduct)
+        advanceUntilIdle()
+
+        assertIs<PurchaseState.Failed>(states.last().purchase)
+        assertTrue("core-2026" !in repository.ownedPackIds())
+    }
+
     /** 스토어 시트가 뜨는 동안 화면이 그 사실을 안다. 버튼을 잠그는 근거다. */
     @Test
     fun `구매를 누르면 진행 상태가 결과보다 먼저 나간다`() = runTest {

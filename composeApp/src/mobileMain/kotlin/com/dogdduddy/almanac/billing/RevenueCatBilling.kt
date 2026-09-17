@@ -38,6 +38,7 @@ class RevenueCatBilling(
 ) : Billing {
 
     private val byProductId = catalog.associateBy { it.productId }
+    private val knownPackIds = catalog.mapTo(mutableSetOf()) { it.packId }
 
     override suspend fun products(): List<BillingProduct> {
         val storeProducts: List<StoreProduct> =
@@ -74,7 +75,17 @@ class RevenueCatBilling(
             val result = Purchases.sharedInstance.awaitPurchase(storeProduct)
             // 구매 직후의 customerInfo 를 쓴다. 여기서 다시 조회하면
             // 반영 지연 때문에 방금 산 팩이 빠질 수 있다.
-            PurchaseOutcome.Purchased(result.customerInfo.toPackIds())
+            val active = result.customerInfo.toPackIds()
+            if (product.packId in active) {
+                // 다른 상품을 이미 보유하고 있어도 이번 구매가 연 팩만 넘긴다.
+                // 그래야 로컬 지급 실패의 범위와 구매 확인 문구가 이번 상품에 한정된다.
+                PurchaseOutcome.Purchased(setOf(product.packId))
+            } else {
+                // 스토어 거래가 반환됐더라도 RevenueCat 상품-entitlement 연결이 빠졌다면
+                // 콘텐츠는 열리지 않는다. 이 상태를 성공으로 말하면 유저는 결제 후에도
+                // 잠긴 서가와 마주친다.
+                PurchaseOutcome.Failed("expected entitlement is not active: ${product.packId}")
+            }
         } catch (e: PurchasesTransactionException) {
             if (e.userCancelled) PurchaseOutcome.Cancelled
             else PurchaseOutcome.Failed(e.message ?: "purchase failed")
@@ -86,9 +97,15 @@ class RevenueCatBilling(
     override suspend fun restore(): Set<String> =
         Purchases.sharedInstance.awaitRestore().toPackIds()
 
-    /** 활성 엔티틀먼트 → 보유 팩. 식별자를 packId 와 같게 뒀으므로 그대로 쓴다. */
+    /**
+     * 활성 엔티틀먼트 → 이 앱의 보유 팩.
+     *
+     * 같은 RevenueCat 프로젝트에 다른 앱이나 실험용 entitlement 가 있어도 로컬 DB 에
+     * 넣지 않는다. content.db 에 없는 packId 는 지급할 수 없고, 구매 완료 뒤 DB 예외를
+     * 만들면 실제 청구 여부와 화면 안내가 어긋날 수 있다.
+     */
     private fun CustomerInfo.toPackIds(): Set<String> =
-        entitlements.active.keys.toSet()
+        entitlements.active.keys.filterTo(mutableSetOf()) { it in knownPackIds }
 }
 
 /**
