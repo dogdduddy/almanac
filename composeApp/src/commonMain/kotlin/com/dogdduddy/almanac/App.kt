@@ -1167,6 +1167,7 @@ private fun RedeemSection(onRedeemCode: (String) -> RedeemOutcome, enabled: Bool
                 text = when (outcome) {
                     RedeemOutcome.AlreadyUnlocked -> "You already have all of them."
                     RedeemOutcome.UnknownCode -> "That code did not work."
+                    RedeemOutcome.Expired -> "That code has expired."
                     // 코드 탓이 아니다. 다시 해보라고만 말한다.
                     else -> "Something went wrong. Try again."
                 },

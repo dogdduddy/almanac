@@ -27,6 +27,9 @@ class PromoRedemptionTest {
     private lateinit var billing: StoreWithNothing
     private lateinit var promo: PromoRedemption
 
+    /** 테스트가 옮길 수 있는 시계. 기본값은 만료 한참 전이다. */
+    private var now = 1_800_000_000L
+
     @BeforeTest
     fun setUp() {
         contentDriver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
@@ -44,12 +47,10 @@ class PromoRedemptionTest {
             0,
         )
 
-        repo = AlmanacRepository(ContentDatabase(contentDriver), UserDatabase(userDriver)) {
-            1_800_000_000L
-        }
+        repo = AlmanacRepository(ContentDatabase(contentDriver), UserDatabase(userDriver)) { now }
         repo.ensureBaseEntitlement()
         billing = StoreWithNothing()
-        promo = PromoRedemption(repo)
+        promo = PromoRedemption(repo) { now }
     }
 
     @AfterTest
@@ -112,6 +113,43 @@ class PromoRedemptionTest {
             repo.packIdsFromSource(PackSource.PROMO),
         )
         assertEquals(listOf("starter-2026"), repo.packIdsFromSource(PackSource.BUNDLED))
+    }
+
+    /**
+     * 기간을 두는 이유는 사용 횟수를 못 세기 때문이다. 서버가 없어 이 코드는 횟수 제한이
+     * 없고, 제출 페이지가 공개되면 그대로 영구 무료 해제가 된다.
+     */
+    @Test
+    fun `기간이 지난 코드는 받지 않는다`() {
+        now = PromoCodes.EXPIRES_AT_EPOCH_SECONDS
+
+        assertEquals(RedeemOutcome.Expired, promo.redeem("SHIPATON-2026"))
+        assertEquals(listOf("starter-2026"), repo.ownedPackIds())
+    }
+
+    /**
+     * 만료를 먼저 보면 **아무 문자열이나** "만료됐다" 는 답을 받는다.
+     * 코드가 존재한다는 사실이 거기서 샌다.
+     */
+    @Test
+    fun `기간이 지나도 모르는 코드는 모르는 코드다`() {
+        now = PromoCodes.EXPIRES_AT_EPOCH_SECONDS
+
+        assertEquals(RedeemOutcome.UnknownCode, promo.redeem("SHIPATON-2025"))
+    }
+
+    /** 만료는 새 입력만 막는다. 심사 중에 이미 연 기기가 닫히면 그게 더 나쁘다. */
+    @Test
+    fun `만료는 이미 열린 기기를 닫지 않는다`() = runTest {
+        promo.redeem("SHIPATON-2026")
+
+        now = PromoCodes.EXPIRES_AT_EPOCH_SECONDS + 86_400L
+
+        assertEquals(3, repo.ownedPackIds().size)
+        assertEquals(
+            setOf("starter-2026", "core-2026", "sea-2026"),
+            EntitlementSync(repo, billing).sync(),
+        )
     }
 
     /** 서가 진입점의 조건. 전부 열렸으면 더 보여줄 것이 없다. */

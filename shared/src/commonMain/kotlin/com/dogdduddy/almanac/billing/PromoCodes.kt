@@ -19,6 +19,9 @@ sealed interface RedeemOutcome {
 
     data object UnknownCode : RedeemOutcome
 
+    /** 코드는 맞지만 기간이 지났다. 대회가 끝난 뒤에도 무한정 열리지 않게 한다. */
+    data object Expired : RedeemOutcome
+
     /** DB 쓰기 실패 등. 코드 탓이 아니므로 "틀린 코드" 로 안내하면 안 된다. */
     data class Failed(val message: String) : RedeemOutcome
 }
@@ -26,11 +29,15 @@ sealed interface RedeemOutcome {
 /**
  * 프로모션 코드.
  *
- * **왜 스토어 프로모 코드가 아니라 앱 안에서 처리하는가.**
- * App Store 프로모 코드는 앱이 이미 심사를 통과해 판매 중이어야 발급되고 iOS 에만 있다.
- * Play 는 별도 체계이고 심사위원이 Play 계정으로 테스트 트랙에 들어와야 한다.
- * 제출물에 **한 줄로 적어 어느 기기에서든 즉시 열리는 코드**가 필요하므로 앱이 직접 받는다.
- * 스토어 프로모 코드는 그것대로 발급해 병행한다 — 둘은 배타적이지 않다.
+ * **이것은 백업이다.** 심사위원에게 주는 정식 경로는 스토어 코드(iOS Offer Code /
+ * Play 프로모션)이고, 그쪽만이 실제 구매 파이프라인을 타서 **RevenueCat 연동을 증명한다.**
+ * 여기 있는 코드는 그 파이프라인을 **타지 않는다** — 엔티틀먼트 없이 로컬에서 팩을 지급한다.
+ *
+ * 그래도 두는 이유는 하나다. 스토어 코드는 **앱이 심사를 통과해 판매 중이어야** 나온다.
+ * 마감까지 한쪽 스토어가 안 열리면 그쪽 심사위원에게는 줄 것이 없어지고,
+ * 그러면 심사위원이 본 것은 무료 버전뿐이다. 그 경우에만 쓰는 비상구다.
+ *
+ * 자세한 판단과 스토어 설정은 docs/decisions/promo-code.md 참고.
  *
  * **평문을 소스에 두지 않는다.** APK/IPA 는 공개물이라 `strings` 한 번이면 드러난다.
  * 정규화한 코드의 FNV-1a 64 해시만 싣고, 평문은 (비공개인) 저장소 문서에 적는다.
@@ -54,10 +61,27 @@ object PromoCodes {
         11848185665498842550uL,  // 심사용 · Design Award
     )
 
+    /**
+     * 2027-01-31 00:00 UTC. 이 시각을 넘기면 코드를 더는 받지 않는다.
+     *
+     * **기간을 두는 이유는 사용 횟수를 못 세기 때문이다.** 서버가 없으므로 이 코드는
+     * 횟수 제한이 없고, 제출 페이지가 공개되면 그대로 영구 무료 해제가 된다
+     * (스토어 코드는 1회용이라 이 문제가 없다).
+     *
+     * 심사와 후속 발표가 끝나고도 한참 뒤로 잡았다. 짧게 잡아 심사 중에 막히는 쪽이
+     * 훨씬 나쁘다 — 그때는 고칠 방법이 앱 업데이트뿐이다.
+     *
+     * **이미 열린 기기는 건드리지 않는다.** 만료는 새 입력만 막는다.
+     */
+    const val EXPIRES_AT_EPOCH_SECONDS: Long = 1_801_353_600L
+
     fun isAccepted(raw: String): Boolean {
         val normalized = normalize(raw)
         return normalized.isNotEmpty() && fnv1a64(normalized) in ACCEPTED
     }
+
+    fun isExpired(nowEpochSeconds: Long): Boolean =
+        nowEpochSeconds >= EXPIRES_AT_EPOCH_SECONDS
 
     /**
      * 대소문자·하이픈·공백을 지운다.
@@ -79,10 +103,16 @@ object PromoCodes {
  * 지급 출처는 [PackSource.PROMO] 다. 이 표시가 없으면 다음 스토어 동기화에서
  * "결제가 없는 보유 팩" 으로 보여 **바로 회수된다** ([EntitlementSync] 참고).
  */
-class PromoRedemption(private val repository: AlmanacRepository) {
+class PromoRedemption(
+    private val repository: AlmanacRepository,
+    private val nowEpochSeconds: () -> Long,
+) {
 
     fun redeem(rawCode: String): RedeemOutcome {
+        // 순서가 중요하다. 만료를 먼저 보면 **아무 문자열이나** "만료됐다" 는 답을 받아,
+        // 코드가 존재한다는 사실이 새어 나간다.
         if (!PromoCodes.isAccepted(rawCode)) return RedeemOutcome.UnknownCode
+        if (PromoCodes.isExpired(nowEpochSeconds())) return RedeemOutcome.Expired
 
         return runCatching {
             val locked = repository.lockedPackIds()

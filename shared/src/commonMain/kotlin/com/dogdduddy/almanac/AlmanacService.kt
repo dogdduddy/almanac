@@ -244,12 +244,13 @@ class AlmanacService(
     fun hasLockedPacks(): Boolean = content.lockedPackIds().isNotEmpty()
 
     /**
-     * 프로모션 코드를 받는다.
+     * 프로모션 코드를 받는다. **스토어 코드가 없을 때 쓰는 비상구다.**
      *
-     * 제출물에 적어 보내는 그 코드다. 스토어 결제 없이 전부 열리며,
-     * 지급 출처가 `promo` 라서 이후 스토어 동기화가 회수하지 않는다.
+     * 결제 파이프라인을 타지 않으므로 RevenueCat 연동을 증명하지 못한다.
+     * 심사위원에게 주는 정식 경로는 스토어 코드다 — docs/decisions/promo-code.md 참고.
      */
-    fun redeemPromoCode(code: String): RedeemOutcome = PromoRedemption(content).redeem(code)
+    fun redeemPromoCode(code: String): RedeemOutcome =
+        PromoRedemption(content) { clock.nowEpochSeconds() }.redeem(code)
 
     // ---- 촬영 준비 -----------------------------------------------------------
 
