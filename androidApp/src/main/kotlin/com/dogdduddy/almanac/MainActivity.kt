@@ -72,6 +72,8 @@ class MainActivity : ComponentActivity() {
                     onPurchase = loader::purchase,
                     onRestore = loader::restore,
                     onPurchaseAcknowledged = loader::acknowledgePurchase,
+                    onRedeemCode = loader::redeem,
+                    demo = demoActions(),
                 ),
             )
         }
@@ -93,6 +95,20 @@ class MainActivity : ComponentActivity() {
             requestLocation.launch(android.Manifest.permission.ACCESS_COARSE_LOCATION)
         }
     }
+
+    /**
+     * 촬영용 조건 고정 창구. **디버그 빌드에서만 만든다.**
+     *
+     * 릴리스에서는 null 이라 About 화면의 진입 줄 자체가 없다. 고정 자체는 shared 에
+     * 남지만 아무도 값을 넣지 않으므로 경로가 죽는다.
+     */
+    private fun demoActions(): DemoActions? =
+        if (!BuildConfig.DEBUG) null
+        else DemoActions(
+            controls = AlmanacGraph.demo,
+            onApply = loader::refresh,
+            onResetHistory = loader::resetHistory,
+        )
 
     private fun publishState(next: AppState) {
         // Compose 상태를 먼저 바꾼다. 위젯 갱신이 느리거나 실패해도 앱 첫 화면에는

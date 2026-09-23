@@ -14,18 +14,16 @@ import com.dogdduddy.almanac.data.PackSource
  * - 결제로 얻은 팩을 지급한다
  * - **결제가 사라진 팩을 회수한다** (환불, 기기 변경, 구독 만료)
  *
- * 자동 지급 팩(무료 스타터)은 절대 회수하지 않는다. 회수하면 무료 유저의 화면이
- * 통째로 비어버린다.
+ * **회수 예외가 둘 있다.** 자동 지급 팩(무료 스타터)과 프로모션 코드로 연 팩이다.
+ * 둘 다 결제 기록이 없으므로, 예외로 두지 않으면 첫 동기화에서 바로 사라진다 —
+ * 무료 유저는 화면이 통째로 비고, 코드를 넣은 심사위원은 서가가 조용히 닫힌다.
  */
 class EntitlementSync(
     private val repository: AlmanacRepository,
     private val billing: Billing,
 ) {
 
-    /**
-     * @param autoGrantPackIds 설치 시 자동 지급되는 팩. 회수 대상에서 제외된다
-     * @return 동기화 후 보유 팩
-     */
+    /** @return 동기화 후 보유 팩 */
     suspend fun sync(): Set<String> {
         repository.ensureBaseEntitlement()
 
@@ -36,7 +34,9 @@ class EntitlementSync(
         }
 
         val owned = repository.ownedPackIds().toSet()
-        val protectedPacks = repository.autoGrantPackIds().toSet()
+        // 결제로 얻지 않은 것들. 스토어에 없다고 회수하면 안 된다.
+        val protectedPacks = repository.autoGrantPackIds().toSet() +
+            repository.packIdsFromSource(PackSource.PROMO)
 
         (entitled - owned).forEach { repository.grantPack(it, PackSource.PURCHASE) }
         (owned - entitled - protectedPacks).forEach { repository.revokePack(it) }

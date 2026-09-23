@@ -7,6 +7,7 @@ import com.dogdduddy.almanac.data.AlmanacRepository
 import com.dogdduddy.almanac.data.DatabaseFactory
 import com.dogdduddy.almanac.db.content.ContentDatabase
 import com.dogdduddy.almanac.db.user.UserDatabase
+import com.dogdduddy.almanac.demo.DemoControls
 import com.dogdduddy.almanac.location.LocationRepository
 import com.dogdduddy.almanac.location.systemLocationSource
 import com.dogdduddy.almanac.weather.WeatherRepository
@@ -39,6 +40,13 @@ object IosAlmanacGraph {
      */
     var billing: Billing = PreviewBilling
 
+    /**
+     * 촬영용 조건 고정. 값을 넣는 창구는 디버그 빌드에서만 만든다 (MainViewController).
+     *
+     * **위젯 익스텐션은 별도 프로세스라 이 값을 못 본다.** iOS 위젯 컷은 실제 날씨로 찍는다.
+     */
+    val demo = DemoControls()
+
     private val clock by lazy { systemDeviceClock() }
     private val factory by lazy { DatabaseFactory() }
 
@@ -66,6 +74,7 @@ object IosAlmanacGraph {
                 nowEpochSeconds = { clock.nowEpochSeconds() },
             ),
             clock = clock,
+            demo = demo,
         )
     }
 }

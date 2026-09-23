@@ -65,6 +65,24 @@ class AlmanacRepository(
     /** 설치 시 자동 지급되는(=무료) 팩. 결제 동기화에서 회수 대상이 되면 안 된다. */
     fun autoGrantPackIds(): List<String> = contentQueries.autoGrantPackIds().executeAsList()
 
+    /** 이 출처로 지급된 보유 팩. 회수 예외를 가리는 데 쓴다. */
+    fun packIdsFromSource(source: PackSource): List<String> =
+        userQueries.packIdsFromSource(source.wire).executeAsList()
+
+    /**
+     * content.db 에 있는데 아직 보유하지 않은 팩.
+     *
+     * 비어 있지 않다 = 아직 열 것이 남았다. 화면은 이걸로 서가 진입점을 결정한다.
+     * **스토어 상품 목록과는 다른 질문이다** — 오프라인이거나 상품 심사가 안 끝나
+     * 살 것이 없는 상태에서도 코드로는 열 수 있어야 한다.
+     */
+    fun lockedPackIds(): List<String> {
+        val owned = ownedPackIds().toSet()
+        return contentQueries.allPacks().executeAsList()
+            .map { it.id }
+            .filterNot { it in owned }
+    }
+
     /** 환불·기기 변경 등으로 결제가 사라졌을 때 회수한다. */
     fun revokePack(packId: String) = userQueries.revokePack(packId)
 
@@ -240,6 +258,17 @@ class AlmanacRepository(
         return Bucket.ALL.filterNot { it in covered }
     }
 
+    /**
+     * **촬영 준비 전용.** 표시 이력을 통째로 지운다.
+     *
+     * 아카이브·히스토리·읽음 횟수가 한꺼번에 사라진다. 분할 화면 촬영에서 두 기기의
+     * 출발선을 맞추는 유일한 방법이라 있다 — 시드를 같게 맞춰도 히스토리와 읽음 횟수가
+     * 다르면 다른 문장이 나온다(결정론 계약 2.7).
+     *
+     * 유저 데이터를 지우므로 디버그 빌드의 촬영 메뉴에서만 부른다.
+     */
+    fun clearHistory() = userQueries.clearHistory()
+
     /** 앱에서 실제로 읽은 슬롯만 돌려준다. 위젯으로 고정만 된 슬롯은 제외한다. */
     fun archive(limit: Int, offset: Int = 0) =
         userQueries.archive(limit.toLong(), offset.toLong()).executeAsList()
@@ -282,4 +311,12 @@ enum class PackSource(val wire: String) {
     BUNDLED("bundled"),
     PURCHASE("purchase"),
     RESTORE("restore"),
+
+    /**
+     * 프로모션 코드로 열린 것. 결제가 없으므로 **스토어 동기화가 회수하면 안 된다.**
+     *
+     * 이 구분이 없으면 심사위원이 코드로 연 서가가 다음 동기화에서 조용히 닫힌다 —
+     * 화면에는 에러가 없고, 어제 읽던 문장이 사라진 것으로만 보인다.
+     */
+    PROMO("promo"),
 }

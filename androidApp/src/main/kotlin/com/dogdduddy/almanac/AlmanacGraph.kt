@@ -8,6 +8,7 @@ import com.dogdduddy.almanac.data.AlmanacRepository
 import com.dogdduddy.almanac.data.DatabaseFactory
 import com.dogdduddy.almanac.db.content.ContentDatabase
 import com.dogdduddy.almanac.db.user.UserDatabase
+import com.dogdduddy.almanac.demo.DemoControls
 import com.dogdduddy.almanac.location.AndroidLocationSource
 import com.dogdduddy.almanac.location.LocationRepository
 import com.dogdduddy.almanac.weather.WeatherRepository
@@ -43,6 +44,14 @@ object AlmanacGraph {
      */
     val billing: Billing by lazy { createAndroidBilling() }
 
+    /**
+     * 촬영용 조건 고정. **Activity 와 Glance 위젯이 같은 프로세스라 같은 인스턴스를 본다** —
+     * 앱에서 비를 고정하면 홈 화면 위젯도 같은 문장으로 갱신된다.
+     *
+     * 값을 넣는 창구는 디버그 빌드에서만 만든다 (MainActivity).
+     */
+    val demo = DemoControls()
+
     fun entitlements(context: Context): EntitlementSync {
         service(context)
         return checkNotNull(syncRef)
@@ -77,6 +86,7 @@ object AlmanacGraph {
                 nowEpochSeconds = { clock.nowEpochSeconds() },
             ),
             clock = clock,
+            demo = demo,
         )
     }
 }

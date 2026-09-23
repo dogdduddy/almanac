@@ -11,8 +11,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -58,7 +60,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dogdduddy.almanac.billing.BillingProduct
+import com.dogdduddy.almanac.billing.RedeemOutcome
+import com.dogdduddy.almanac.core.TimeOfDay
 import com.dogdduddy.almanac.core.WeatherGroup
+import com.dogdduddy.almanac.demo.DemoControls
 import com.dogdduddy.almanac.location.Cities
 import com.dogdduddy.almanac.location.City
 import com.dogdduddy.almanac.location.LocationMode
@@ -97,9 +102,35 @@ data class AppActions(
      * 어디에 있는지 말할 자리가 여기뿐이다. 모바일은 null.
      */
     val shelfNote: String? = null,
+    /**
+     * 프로모션 코드를 받는다. **코드 자체의 문제만** 그 자리에서 돌려준다 —
+     * 열렸다는 소식은 구매와 같은 경로([PurchaseState])로 화면에 온다.
+     *
+     * null 이면 입력란을 만들지 않는다. 넣어도 아무 일이 없는 칸을 두지 않는다.
+     */
+    val onRedeemCode: ((String) -> RedeemOutcome)? = null,
+    /**
+     * 촬영용 조건 고정 창구. **디버그 빌드에서만 채운다.**
+     * null 이면 진입점이 아예 없으므로 릴리스에서는 경로가 통째로 없다.
+     */
+    val demo: DemoActions? = null,
 )
 
-private enum class Screen { PAGES, CITIES, ABOUT, PAYWALL }
+/**
+ * 촬영용 조건 고정을 화면에 잇는 창구.
+ *
+ * [DemoControls] 는 shared 의 평범한 클래스다 — Compose 를 shared 로 끌어들이지 않으려고
+ * 상태 관찰 대신 [onApply] 로 다시 그리기를 요청한다.
+ */
+data class DemoActions(
+    val controls: DemoControls,
+    /** 고정값을 바꿨다. 페이지를 다시 그려야 한다. */
+    val onApply: () -> Unit,
+    /** 표시 이력을 지운다. 분할 화면에서 두 기기의 출발선을 맞출 때 쓴다. */
+    val onResetHistory: () -> Unit,
+)
+
+private enum class Screen { PAGES, CITIES, ABOUT, PAYWALL, DEMO }
 
 @Composable
 fun App(state: AppState, actions: AppActions = AppActions()) {
@@ -121,6 +152,7 @@ fun App(state: AppState, actions: AppActions = AppActions()) {
                     onBack = { screen = Screen.PAGES },
                     onOpenPrivacy = actions.onOpenPrivacy,
                     shelfNote = actions.shelfNote,
+                    onOpenDemo = actions.demo?.let { { screen = Screen.DEMO } },
                 )
 
                 // **구매를 눌러도 여기서 화면을 닫지 않는다.** 예전에는 닫았고,
@@ -132,8 +164,16 @@ fun App(state: AppState, actions: AppActions = AppActions()) {
                     purchase = state.purchase,
                     onPurchase = actions.onPurchase,
                     onRestore = actions.onRestore,
+                    onRedeemCode = actions.onRedeemCode,
                     onBack = { actions.onPurchaseAcknowledged(); screen = Screen.PAGES },
                 )
+
+                Screen.DEMO -> {
+                    val demo = actions.demo
+                    // 진입점이 없는 빌드에서는 닿을 수 없는 경로다. 그래도 빈 화면은 만들지 않는다.
+                    if (demo == null) LaunchedEffect(Unit) { screen = Screen.PAGES }
+                    else DemoScreen(demo = demo, onBack = { screen = Screen.PAGES })
+                }
 
                 // 첫 화면(제목)에서 문장으로 넘어갈 때만 섞는다. 그 뒤 상태 갱신
                 // (측위, 상품)은 같은 페이지의 값만 바뀌므로 다시 섞지 않는다.
@@ -154,7 +194,10 @@ fun App(state: AppState, actions: AppActions = AppActions()) {
                         state is AppState.Ready -> Pages(
                             pages = state.pages,
                             locationLabel = state.locationLabel,
-                            canUpgrade = state.products.isNotEmpty(),
+                            // **상품이 없어도 열 것이 남았으면 보여준다.** 오프라인이거나
+                            // 상품 심사가 안 끝나면 목록은 비는데, 그때도 코드는 넣을 수 있어야 한다.
+                            canOpenShelf = state.products.isNotEmpty() ||
+                                (state.hasLockedPacks && actions.onRedeemCode != null),
                             actions = actions,
                             onOpenCities = { screen = Screen.CITIES },
                             onOpenAbout = { screen = Screen.ABOUT },
@@ -176,7 +219,7 @@ fun App(state: AppState, actions: AppActions = AppActions()) {
 private fun Pages(
     pages: List<TodaysPage>,
     locationLabel: String,
-    canUpgrade: Boolean,
+    canOpenShelf: Boolean,
     actions: AppActions,
     onOpenCities: () -> Unit,
     onOpenAbout: () -> Unit,
@@ -215,7 +258,7 @@ private fun Pages(
                 // 미리 그릴 때 돌아버리면 넘겼을 때 이미 끝나 있다.
                 active = pagerState.settledPage == index,
                 locationLabel = locationLabel,
-                canUpgrade = canUpgrade,
+                canOpenShelf = canOpenShelf,
                 actions = if (index == 0) actions else AppActions(),
                 onOpenCities = onOpenCities,
                 onOpenAbout = onOpenAbout,
@@ -262,7 +305,7 @@ private fun PageBody(
     isCurrent: Boolean,
     active: Boolean,
     locationLabel: String,
-    canUpgrade: Boolean,
+    canOpenShelf: Boolean,
     actions: AppActions,
     onOpenCities: () -> Unit,
     onOpenAbout: () -> Unit,
@@ -329,7 +372,7 @@ private fun PageBody(
                 Box(modifier = Modifier.graphicsLayer { alpha = entrance.meta() }) {
                     Footer(
                         locationLabel = locationLabel,
-                        canUpgrade = canUpgrade,
+                        canOpenShelf = canOpenShelf,
                         actions = actions,
                         onOpenCities = onOpenCities,
                         onOpenAbout = onOpenAbout,
@@ -595,7 +638,7 @@ private fun DrawScope.drawSnowflakeGlyph(center: Offset, color: Color, lineWidth
 @Composable
 private fun Footer(
     locationLabel: String,
-    canUpgrade: Boolean,
+    canOpenShelf: Boolean,
     actions: AppActions,
     onOpenCities: () -> Unit,
     onOpenAbout: () -> Unit,
@@ -609,8 +652,8 @@ private fun Footer(
         // 위치는 곧 "어디의 하늘인가" 라서 화면에 남기고, 누르면 바꿀 수 있게 한다.
         FooterLink(locationLabel.ifBlank { "Choose a place" }, onOpenCities)
         actions.onAddWidget?.let { FooterLink("Widget", it) }
-        // 살 수 있을 때만 보인다. 이미 다 가진 유저에게 파는 화면을 띄우지 않는다.
-        if (canUpgrade) FooterLink("The shelf", onOpenPaywall)
+        // 아직 열 것이 남았을 때만 보인다. 이미 다 가진 유저에게 서가를 띄우지 않는다.
+        if (canOpenShelf) FooterLink("The shelf", onOpenPaywall)
         FooterLink("About", onOpenAbout)
     }
 }
@@ -730,7 +773,13 @@ private fun CityScreen(
  * 그걸 주장이 아니라 **문서로** 보여주는 자리가 필요하다.
  */
 @Composable
-private fun AboutScreen(onBack: () -> Unit, onOpenPrivacy: (() -> Unit)?, shelfNote: String? = null) {
+private fun AboutScreen(
+    onBack: () -> Unit,
+    onOpenPrivacy: (() -> Unit)?,
+    shelfNote: String? = null,
+    /** 디버그 빌드에서만 채워진다. null 이면 줄 자체가 없다. */
+    onOpenDemo: (() -> Unit)? = null,
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -763,9 +812,22 @@ private fun AboutScreen(onBack: () -> Unit, onOpenPrivacy: (() -> Unit)?, shelfN
                 fontSize = 15.sp,
                 fontFamily = Serif,
                 color = Muted,
-                modifier = Modifier.padding(bottom = 48.dp).clickable(onClick = it),
+                modifier = Modifier.padding(bottom = 16.dp).clickable(onClick = it),
             )
         }
+
+        // 촬영용. 릴리스에서는 onOpenDemo 가 null 이라 이 줄이 존재하지 않는다.
+        onOpenDemo?.let {
+            Text(
+                "Demo controls",
+                fontSize = 15.sp,
+                fontFamily = Serif,
+                color = Muted,
+                modifier = Modifier.padding(bottom = 16.dp).clickable(onClick = it),
+            )
+        }
+
+        Spacer(Modifier.height(32.dp))
     }
 }
 
@@ -856,6 +918,7 @@ private fun PaywallScreen(
     purchase: PurchaseState,
     onPurchase: (BillingProduct) -> Unit,
     onRestore: () -> Unit,
+    onRedeemCode: ((String) -> RedeemOutcome)?,
     onBack: () -> Unit,
 ) {
     Column(
@@ -929,6 +992,8 @@ private fun PaywallScreen(
         }
 
         PurchaseNotice(purchase)
+
+        onRedeemCode?.let { RedeemSection(onRedeemCode = it, enabled = !working) }
 
         // 스토어 정책상 반드시 있어야 한다. 기기를 바꾼 유저의 유일한 출구이기도 하다.
         Column(modifier = Modifier.padding(bottom = 48.dp)) {
@@ -1046,3 +1111,200 @@ private fun PaywallButton(
             .padding(vertical = 14.dp),
     )
 }
+
+/**
+ * 프로모션 코드 입력. **스토어 코드가 없을 때 쓰는 비상구다**
+ * (docs/decisions/promo-code.md).
+ *
+ * **서가에 둔다.** 잠긴 것을 여는 창구가 둘이므로 같은 화면에 있어야 하고,
+ * 심사위원이 "어디에 넣지" 를 고민하는 순간 제출물의 체험 경로가 끊긴다.
+ * 스토어가 죽어 상품 목록이 비어도 이 칸은 남는다 — 그게 이 칸이 존재하는 이유다.
+ *
+ * **성공 문구는 여기서 말하지 않는다.** 열렸다는 소식은 [PurchaseState.Unlocked] 로
+ * 올라가 페이월 위쪽의 확인 화면이 받는다 — 구매로 열린 것과 다른 사건일 이유가 없다.
+ * 여기 남는 것은 코드 자체의 문제뿐이다.
+ */
+@Composable
+private fun RedeemSection(onRedeemCode: (String) -> RedeemOutcome, enabled: Boolean) {
+    var code by remember { mutableStateOf("") }
+    var problem by remember { mutableStateOf<RedeemOutcome?>(null) }
+
+    Column(modifier = Modifier.padding(bottom = 28.dp)) {
+        Text("Have a code", fontSize = 13.sp, fontFamily = Serif, color = Muted)
+
+        BasicTextField(
+            value = code,
+            onValueChange = { code = it; problem = null },
+            singleLine = true,
+            enabled = enabled,
+            textStyle = TextStyle(fontSize = 17.sp, fontFamily = Serif, color = Ink),
+            cursorBrush = SolidColor(Ink),
+            decorationBox = { inner ->
+                Box(modifier = Modifier.heightIn(min = 44.dp)) {
+                    if (code.isEmpty()) {
+                        Text("Enter it here", fontSize = 17.sp, fontFamily = Serif, color = Muted)
+                    }
+                    inner()
+                }
+            },
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        )
+
+        PaywallButton(
+            label = "Open the shelf",
+            enabled = enabled && code.isNotBlank(),
+            onClick = {
+                when (val outcome = onRedeemCode(code)) {
+                    // 화면이 통째로 확인 화면으로 바뀐다. 여기서 더 할 말이 없다.
+                    is RedeemOutcome.Unlocked -> { code = ""; problem = null }
+                    else -> problem = outcome
+                }
+            },
+        )
+
+        problem?.let { outcome ->
+            Text(
+                text = when (outcome) {
+                    RedeemOutcome.AlreadyUnlocked -> "You already have all of them."
+                    RedeemOutcome.UnknownCode -> "That code did not work."
+                    // 코드 탓이 아니다. 다시 해보라고만 말한다.
+                    else -> "Something went wrong. Try again."
+                },
+                fontSize = 13.sp,
+                lineHeight = 20.sp,
+                fontFamily = Serif,
+                color = Muted,
+                modifier = Modifier.padding(top = 10.dp),
+            )
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 촬영용 조건 고정 — 디버그 빌드 전용
+// ---------------------------------------------------------------------------
+
+/**
+ * 데모 영상 촬영 메뉴.
+ *
+ * 날씨·시간대·시드를 고정한다. 사유는 [DemoControls] 와 docs/product/demo-video.md 참고.
+ *
+ * [DemoControls] 는 shared 의 평범한 클래스라 Compose 가 변화를 관찰하지 못한다.
+ * shared 를 Compose 에 묶지 않으려는 선택이므로, 그 대가로 여기서 [revision] 을 올려
+ * 다시 그린다.
+ */
+@Composable
+private fun DemoScreen(demo: DemoActions, onBack: () -> Unit) {
+    var revision by remember { mutableStateOf(0) }
+    val controls = demo.controls
+
+    // revision 을 읽어야 다시 그려진다. remember 의 key 로 두면 의도가 드러난다.
+    val weather = remember(revision) { controls.weatherGroup }
+    val time = remember(revision) { controls.timeOfDay }
+    val seedShared = remember(revision) { controls.installId != null }
+
+    fun apply(change: DemoControls.() -> Unit) {
+        controls.change()
+        revision++
+        demo.onApply()
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 28.dp),
+    ) {
+        ScreenHeader("Demo", onBack)
+
+        DemoGroupLabel("Weather")
+        DemoRow("Real weather", selected = weather == null) {
+            apply { weatherGroup = null; temperatureC = null }
+        }
+        WeatherGroup.entries.forEach { group ->
+            DemoRow(group.displayName, selected = weather == group) {
+                // 기온도 같이 옮긴다. 눈 아이콘 옆의 21° 는 영상에서 바로 보이는 모순이다.
+                apply {
+                    weatherGroup = group
+                    temperatureC = DemoControls.defaultTemperature(group)
+                }
+            }
+        }
+
+        DemoGroupLabel("Time of day")
+        DemoRow("Real time", selected = time == null) { apply { timeOfDay = null } }
+        TimeOfDay.entries.forEach { slot ->
+            DemoRow(slot.displayName, selected = time == slot) { apply { timeOfDay = slot } }
+        }
+
+        DemoGroupLabel("Seed")
+        DemoRow("This device", selected = !seedShared) { apply { installId = null } }
+        DemoRow("Shared seed", selected = seedShared) {
+            apply { installId = DemoControls.SHARED_SEED_INSTALL_ID }
+        }
+        // 슬롯은 (날짜, 시간대, 위치) 로 한 번 고정되면 시드를 바꿔도 다시 고르지 않는다.
+        // 그게 평소에는 옳지만(문장이 뒤집히지 않는다) 여기서는 "바꿨는데 왜 그대로지" 로
+        // 보인다. 그래서 지우는 줄을 같은 묶음에 둔다.
+        DemoRow("Clear the archive", selected = false) { demo.onResetHistory() }
+        Text(
+            text = "Both devices need the shared seed, then a cleared archive. " +
+                "Changing the seed alone will not move a slot that is already fixed.",
+            fontSize = 12.sp,
+            lineHeight = 18.sp,
+            fontFamily = Serif,
+            color = Muted,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+
+        DemoGroupLabel("Done filming")
+        DemoRow("Turn everything off", selected = false) { apply { clear() } }
+
+        Spacer(Modifier.height(48.dp))
+    }
+}
+
+@Composable
+private fun DemoGroupLabel(text: String) {
+    Text(
+        text = text,
+        fontSize = 13.sp,
+        fontFamily = Serif,
+        color = Muted,
+        modifier = Modifier.padding(top = 24.dp, bottom = 4.dp),
+    )
+}
+
+/** 고른 줄에는 잉크색과 가운뎃점을 준다 — 도시 화면의 선택 표시와 같은 방식이다. */
+@Composable
+private fun DemoRow(text: String, selected: Boolean, onClick: () -> Unit) {
+    Text(
+        text = if (selected) "$text ·" else text,
+        fontSize = 16.sp,
+        fontFamily = Serif,
+        color = if (selected) Ink else Muted,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 44.dp)
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp),
+    )
+}
+
+private val WeatherGroup.displayName: String
+    get() = when (this) {
+        WeatherGroup.CLEAR -> "Clear"
+        WeatherGroup.CLOUDY -> "Cloudy"
+        WeatherGroup.FOG -> "Fog"
+        WeatherGroup.DRIZZLE -> "Drizzle"
+        WeatherGroup.RAIN -> "Rain"
+        WeatherGroup.SNOW -> "Snow"
+        WeatherGroup.THUNDER -> "Thunder"
+        WeatherGroup.WIND -> "Wind"
+    }
+
+private val TimeOfDay.displayName: String
+    get() = when (this) {
+        TimeOfDay.MORNING -> "Morning"
+        TimeOfDay.DAY -> "Day"
+        TimeOfDay.EVENING_NIGHT -> "Evening & night"
+    }

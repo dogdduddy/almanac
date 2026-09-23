@@ -71,8 +71,15 @@ sealed interface AppState {
         val pages: List<TodaysPage>,
         val locationLabel: String,
         val locationMode: LocationMode,
-        /** 살 수 있는 상품. 비어 있으면 페이월 진입점을 감춘다. */
+        /** 살 수 있는 상품. 비어 있으면 **구매** 진입점을 감춘다. */
         val products: List<BillingProduct> = emptyList(),
+        /**
+         * 아직 열리지 않은 팩이 남았는가.
+         *
+         * [products] 와 다른 질문이다 — 오프라인이거나 상품 심사가 안 끝나면 상품 목록은
+         * 비지만 코드로는 열 수 있다. 서가 진입점은 이 값으로 결정한다.
+         */
+        val hasLockedPacks: Boolean = false,
         override val purchase: PurchaseState = PurchaseState.Idle,
     ) : AppState
 

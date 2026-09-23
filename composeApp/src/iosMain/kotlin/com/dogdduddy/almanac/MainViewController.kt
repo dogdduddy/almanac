@@ -21,8 +21,12 @@ import platform.UIKit.UIViewController
  * 위치 권한 프롬프트는 첫 측위(IosLocationSource)가 직접 띄운다 —
  * iOS 는 매니저를 만들었다고 알아서 물어보지 않는다. 그 프롬프트가 뜰 때쯤이면
  * [AppLoader] 의 첫 단계가 이미 화면을 채워둔 상태다.
+ *
+ * @param demoTools 촬영용 조건 고정 메뉴를 띄울지. **Swift 의 `#if DEBUG` 가 넘긴다** —
+ *   Kotlin 쪽에서 판단하지 않는 이유는, 여기서 볼 수 있는 것이 Kotlin 프레임워크의
+ *   빌드 구성이지 앱 타깃의 구성이 아니기 때문이다. 릴리스 앱에는 false 로 들어온다.
  */
-fun MainViewController(): UIViewController = ComposeUIViewController {
+fun MainViewController(demoTools: Boolean = false): UIViewController = ComposeUIViewController {
     var state by remember { mutableStateOf<AppState>(AppState.Loading) }
 
     // 메인 디스패처여야 한다. CLLocationManager 를 만드는 스레드가 여기로 정해지고,
@@ -64,6 +68,12 @@ fun MainViewController(): UIViewController = ComposeUIViewController {
             onPurchase = loader::purchase,
             onRestore = loader::restore,
             onPurchaseAcknowledged = loader::acknowledgePurchase,
+            onRedeemCode = loader::redeem,
+            demo = if (!demoTools) null else DemoActions(
+                controls = IosAlmanacGraph.demo,
+                onApply = loader::refresh,
+                onResetHistory = loader::resetHistory,
+            ),
         ),
     )
 }

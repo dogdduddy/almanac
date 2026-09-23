@@ -18,7 +18,11 @@ CREATE TABLE install (
 CREATE TABLE owned_packs (
     pack_id       TEXT    NOT NULL PRIMARY KEY,
     acquired_at   INTEGER NOT NULL,
-    source        TEXT    NOT NULL  -- 'bundled' | 'purchase' | 'restore'
+    -- 'bundled' | 'purchase' | 'restore' | 'promo'
+    --
+    -- 'promo' 는 **결제 없이 지급된 것**이라 스토어 동기화에서 회수 대상이 되면 안 된다.
+    -- 표시가 없으면 심사위원이 코드로 연 서가가 다음 동기화에서 조용히 닫힌다.
+    source        TEXT    NOT NULL
 );
 
 -- 표시 이력. 읽힌 행은 아카이브가 되고, 모든 행은 히스토리 회피의 근거가 된다.
@@ -115,6 +119,11 @@ INSERT OR REPLACE INTO owned_packs (pack_id, acquired_at, source) VALUES (?, ?, 
 revokePack:
 DELETE FROM owned_packs WHERE pack_id = ?;
 
+-- 회수 예외를 가리는 데 쓴다 — 무료 스타터(content.db 가 정한다)와
+-- 코드로 연 팩(여기서 가린다)은 결제가 없어도 회수하지 않는다.
+packIdsFromSource:
+SELECT pack_id FROM owned_packs WHERE source = ? ORDER BY pack_id;
+
 -- PageSelector 의 recentlyShownIds 입력. **최신순**이어야 한다.
 --
 -- **지금 그리는 슬롯 자신은 제외한다.** 이 슬롯은 이미 기록돼 있을 수 있고,
@@ -150,6 +159,17 @@ GROUP BY entry_id;
 pageFor:
 SELECT * FROM daily_page
 WHERE date = :date AND time_of_day = :timeOfDay AND location_key = :locationKey;
+
+-- **촬영 준비 전용.** 표시 이력을 통째로 지운다 = 아카이브·히스토리·읽음 횟수를 되돌린다.
+--
+-- 분할 화면 촬영 때문에 있다. 시드를 같게 맞춰도 히스토리와 읽음 횟수가 다르면
+-- 두 기기가 다른 문장을 낸다 — 그 둘도 선택의 입력이기 때문이다(결정론 계약 2.7).
+-- 출발선을 맞추는 유일한 방법이 이력을 비우는 것이다.
+--
+-- 유저 데이터를 지우므로 앱 화면에서 닿을 수 있는 곳에 두면 안 된다.
+-- 디버그 빌드의 촬영 메뉴에서만 부른다.
+clearHistory:
+DELETE FROM daily_page;
 
 -- 앱에서 실제로 읽은 페이지만 최신순으로 돌려준다.
 -- daily_page 행의 존재는 슬롯 고정만 뜻한다. 위젯만 그린 행까지 아카이브에 넣으면

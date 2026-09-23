@@ -31,6 +31,8 @@ android {
 
     buildFeatures {
         compose = true
+        // BuildConfig.DEBUG 로 촬영용 메뉴를 가른다. AGP 8 부터 기본이 꺼져 있어 명시한다.
+        buildConfig = true
     }
 
     /**

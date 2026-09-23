@@ -4,6 +4,7 @@ import com.dogdduddy.almanac.billing.Billing
 import com.dogdduddy.almanac.billing.BillingProduct
 import com.dogdduddy.almanac.billing.EntitlementSync
 import com.dogdduddy.almanac.billing.PurchaseOutcome
+import com.dogdduddy.almanac.billing.RedeemOutcome
 import com.dogdduddy.almanac.billing.RestoreOutcome
 import com.dogdduddy.almanac.location.City
 import com.dogdduddy.almanac.location.LocationMode
@@ -98,6 +99,38 @@ class AppLoader(
 
     /** 위치 권한 응답이 왔다. 허용이든 거부든 같은 경로로 다시 그린다. */
     fun locationPermissionSettled() = redraw()
+
+    /** 바깥에서 조건이 바뀌었다(촬영용 고정 등). 같은 경로로 다시 그린다. */
+    fun refresh() = redraw()
+
+    /**
+     * 프로모션 코드. **스토어 코드가 없을 때 쓰는 비상구다.**
+     *
+     * 결과를 그 자리에서 돌려주는 이유는 입력란이 코드 자체의 문제(모르는 코드 등)를
+     * 그 옆에서 말해야 하기 때문이다. 반면 **열렸다는 소식은 [PurchaseState] 로 보낸다** —
+     * 구매로 열린 것과 코드로 열린 것이 유저에게 다른 사건일 이유가 없고,
+     * 확인 문구도 이미 거기 있다.
+     *
+     * 순서는 [purchase] 와 같다. 확인을 닫는 순간 새 서가가 이미 거기 있어야 한다.
+     */
+    fun redeem(code: String): RedeemOutcome {
+        val outcome = runCatching { service().redeemPromoCode(code) }
+            .getOrElse { RedeemOutcome.Failed(it.message ?: "redeem failed") }
+
+        if (outcome is RedeemOutcome.Unlocked) {
+            scope.launch {
+                draw(refreshLocation = true, countAsRead = true)
+                setPurchase(PurchaseState.Unlocked(countEntries(outcome.packIds)))
+            }
+        }
+        return outcome
+    }
+
+    /** **디버그 빌드 전용.** 표시 이력을 지우고 다시 그린다. */
+    fun resetHistory() {
+        runCatching { service().resetHistory() }
+        redraw()
+    }
 
     /**
      * 구매를 시작하고 **결과를 화면에 남긴다.**
@@ -201,6 +234,7 @@ class AppLoader(
                     locationLabel = result.locationLabel,
                     locationMode = result.locationMode,
                     products = products,
+                    hasLockedPacks = result.hasLockedPacks,
                     purchase = purchaseState,
                 )
 

@@ -5,8 +5,11 @@ import com.dogdduddy.almanac.core.randomUuid
 import com.dogdduddy.almanac.billing.Billing
 import com.dogdduddy.almanac.billing.BillingProduct
 import com.dogdduddy.almanac.core.WeatherGroup
+import com.dogdduddy.almanac.billing.PromoRedemption
+import com.dogdduddy.almanac.billing.RedeemOutcome
 import com.dogdduddy.almanac.data.AlmanacRepository
 import com.dogdduddy.almanac.data.ResolvedPage
+import com.dogdduddy.almanac.demo.DemoControls
 import com.dogdduddy.almanac.location.City
 import com.dogdduddy.almanac.location.LocationMode
 import com.dogdduddy.almanac.location.LocationRepository
@@ -88,6 +91,11 @@ class AlmanacService(
     private val weather: WeatherRepository,
     private val location: LocationRepository,
     private val clock: DeviceClock,
+    /**
+     * 촬영용 조건 고정. 기본값은 아무것도 고정하지 않은 상태라 평소 경로에 영향이 없다.
+     * 값을 넣는 창구는 디버그 빌드에서만 만든다.
+     */
+    private val demo: DemoControls = DemoControls(),
 ) {
 
     /**
@@ -105,12 +113,17 @@ class AlmanacService(
         content.ensureBaseEntitlement()
 
         val place = if (refreshLocation) location.refresh() else location.current()
-        val conditions = weather.currentConditions(
+        val measured = weather.currentConditions(
             latitude = place.coordinates.latitude,
             longitude = place.coordinates.longitude,
         ) ?: return PageResult.Unavailable(PageUnavailable.NO_WEATHER)
 
-        val installId = content.installId { newInstallId() }
+        // 촬영용 고정이 걸려 있으면 여기서 갈아 끼운다. 바뀌는 것은 엔진의 **입력**뿐이고
+        // 선택 알고리즘은 그대로다 — 그래서 영상에 찍히는 것이 실제 계약이 된다.
+        val conditions = demo.override(measured)
+
+        // 진짜 installId 는 항상 만들어 둔다. 고정을 풀면 원래 문장으로 돌아와야 한다.
+        val installId = demo.installIdOr(content.installId { newInstallId() })
 
         val resolved = content.resolvePage(
             dateKey = conditions.dateKey,
@@ -178,14 +191,19 @@ class AlmanacService(
                 val withoutToday = past.filterNot {
                     it.dateKey == today.page.dateKey && it.timeOfDay == today.page.timeOfDay
                 }
-                PagesState.Ready(listOf(today.page) + withoutToday, place.label, place.mode)
+                PagesState.Ready(
+                    listOf(today.page) + withoutToday,
+                    place.label,
+                    place.mode,
+                    hasLockedPacks(),
+                )
             }
 
             is PageResult.Unavailable ->
                 if (past.isEmpty()) {
                     PagesState.Empty(today.reason, place.label, place.mode)
                 } else {
-                    PagesState.Ready(past, place.label, place.mode)
+                    PagesState.Ready(past, place.label, place.mode, hasLockedPacks())
                 }
         }
     }
@@ -216,6 +234,33 @@ class AlmanacService(
         return packIds.sumOf { counts[it] ?: 0 }
     }
 
+    /**
+     * 아직 열리지 않은 팩이 남았는가.
+     *
+     * **살 것이 있는가와 다른 질문이다.** 오프라인이거나 상품 심사가 안 끝나면
+     * 상품 목록은 비지만 코드로는 열 수 있다. 그 경로까지 감추면 심사위원이
+     * 코드를 받고도 넣을 자리를 못 찾는다.
+     */
+    fun hasLockedPacks(): Boolean = content.lockedPackIds().isNotEmpty()
+
+    /**
+     * 프로모션 코드를 받는다.
+     *
+     * 제출물에 적어 보내는 그 코드다. 스토어 결제 없이 전부 열리며,
+     * 지급 출처가 `promo` 라서 이후 스토어 동기화가 회수하지 않는다.
+     */
+    fun redeemPromoCode(code: String): RedeemOutcome = PromoRedemption(content).redeem(code)
+
+    // ---- 촬영 준비 -----------------------------------------------------------
+
+    /**
+     * **디버그 빌드 전용.** 표시 이력을 지워 두 기기의 출발선을 맞춘다.
+     *
+     * 시드를 같게 고정해도 히스토리와 읽음 횟수가 다르면 다른 문장이 나온다 —
+     * 그 둘도 선택의 입력이기 때문이다(결정론 계약 2.7).
+     */
+    fun resetHistory() = content.clearHistory()
+
     // ---- 위치 선택 -----------------------------------------------------------
 
     fun currentPlace(): ResolvedLocation = location.current()
@@ -239,6 +284,8 @@ sealed interface PagesState {
         val pages: List<TodaysPage>,
         val locationLabel: String,
         val locationMode: LocationMode,
+        /** 아직 열리지 않은 팩이 있는가. 서가 진입점의 조건이다. */
+        val hasLockedPacks: Boolean = false,
     ) : PagesState
 
     data class Empty(
