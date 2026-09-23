@@ -62,10 +62,31 @@ fun main() = application {
                 onPurchaseAcknowledged = loader::acknowledgePurchase,
                 shelfNote = "On this computer the shelf is the free starter. " +
                     "The full collection is bought and read on iPhone and Android.",
+                demo = demoActions(loader),
             ),
         )
     }
 }
+
+/**
+ * 촬영용 조건 고정 창구. **시스템 프로퍼티로 켠다.**
+ *
+ *   ./gradlew :desktopApp:run -Palmanac.demo=true
+ *
+ * 데스크톱에는 `BuildConfig.DEBUG` 도 Swift 의 `#if DEBUG` 도 없다. 환경 변수를 쓰지
+ * 않는 이유는 Gradle 이 앱을 **데몬의 환경**으로 띄우기 때문이다 — 셸에서 앞에 붙인
+ * 변수가 들어가지 않는다. 배포용 distributable 에는 이 프로퍼티가 없으므로 진입점도 없다.
+ *
+ * 데스크톱에 이 창구가 필요한 이유는 하나다. 분할 화면 컷에서 **세 화면이 같은 문장을
+ * 내려면 시드를 맞춰야** 하는데, 데스크톱은 자기 user.db 와 자기 installId 를 갖는다.
+ */
+private fun demoActions(loader: AppLoader): DemoActions? =
+    if (System.getProperty("almanac.demo") != "true") null
+    else DemoActions(
+        controls = DesktopAlmanacGraph.demo,
+        onApply = loader::refresh,
+        onResetHistory = loader::resetHistory,
+    )
 
 private fun openInBrowser(url: String) {
     runCatching {

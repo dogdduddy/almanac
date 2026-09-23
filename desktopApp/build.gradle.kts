@@ -34,6 +34,18 @@ tasks.test {
     useJUnitPlatform()
 }
 
+/**
+ * 촬영용 고정 메뉴 스위치를 앱 JVM 으로 넘긴다.
+ *
+ *   ./gradlew :desktopApp:run -Palmanac.demo=true
+ *
+ * 환경 변수로 하지 않는 이유: Gradle 은 앱을 **데몬의 환경**으로 띄워서, 셸에서 앞에
+ * 붙인 변수가 들어가지 않는다. 기본값이 false 라 그냥 띄우면 진입점이 없다.
+ */
+tasks.withType<JavaExec>().configureEach {
+    systemProperty("almanac.demo", providers.gradleProperty("almanac.demo").getOrElse("false"))
+}
+
 compose.desktop {
     application {
         mainClass = "com.dogdduddy.almanac.MainKt"

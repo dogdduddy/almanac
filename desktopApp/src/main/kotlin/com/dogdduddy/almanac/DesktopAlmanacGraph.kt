@@ -3,6 +3,7 @@ package com.dogdduddy.almanac
 import com.dogdduddy.almanac.billing.Billing
 import com.dogdduddy.almanac.billing.EntitlementSync
 import com.dogdduddy.almanac.billing.NoBilling
+import com.dogdduddy.almanac.demo.DemoControls
 import com.dogdduddy.almanac.data.AlmanacRepository
 import com.dogdduddy.almanac.data.DatabaseFactory
 import com.dogdduddy.almanac.db.content.ContentDatabase
@@ -27,6 +28,12 @@ import java.io.File
 object DesktopAlmanacGraph {
 
     val billing: Billing = NoBilling
+
+    /**
+     * 촬영용 조건 고정. 값을 넣는 창구는 `-Palmanac.demo=true` 로 띄웠을 때만 생긴다
+     * (Main.kt). 데스크톱에는 BuildConfig 도 `#if DEBUG` 도 없다.
+     */
+    val demo = DemoControls()
 
     private val clock by lazy { systemDeviceClock() }
 
@@ -64,6 +71,7 @@ object DesktopAlmanacGraph {
                 nowEpochSeconds = { clock.nowEpochSeconds() },
             ),
             clock = clock,
+            demo = demo,
         )
     }
 
