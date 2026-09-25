@@ -13,9 +13,12 @@
 - 가변 프레임 녹화를 60fps 고정으로 맞춘다
 
 사용:
-    python3 scripts/cut_demo.py montage <녹화 디렉터리> <출력.mp4>
+    python3 scripts/cut_demo.py montage   <녹화 디렉터리> <출력.mp4>   # #5 조립
+    python3 scripts/cut_demo.py subtitles <출력 디렉터리> [연도차]      # 자막 8장
+    python3 scripts/cut_demo.py status    <컷 디렉터리>                # 진행 상황
+    python3 scripts/cut_demo.py master    <컷 디렉터리> <출력.mp4>      # 전체 이어붙이기
 
-의존성: ffmpeg.
+의존성: ffmpeg, swift(자막 렌더).
 """
 
 from __future__ import annotations
@@ -58,6 +61,35 @@ MONTAGE = [
 ]
 
 MONTAGE_SUBTITLE = "Each sky reveals a different page."
+
+#: 상한. 대회 규정이므로 사람이 기억할 일이 아니라 빌드가 막을 일이다.
+MAX_SECONDS = 120.0
+
+#: 콘티 전체 (docs/product/demo-video.md). 합 105초 = 1분 45초.
+#: 한 줄을 고치면 뒤가 저절로 밀린다 — 손으로 맞추지 않는다.
+TIMELINE = [
+    ("01-cold-open",   7.0, 1),
+    ("02-pitch",       7.0, 2),
+    ("03-matching",   12.0, 3),
+    ("04-page-turn",  12.0, 4),
+    ("05-montage",    15.0, None),   # 자막은 montage 단계에서 이미 태운다
+    ("06-widgets",    15.0, None),   # 화면이 스스로 설명한다
+    ("07-kmp",        14.0, 6),
+    ("08-purchase",   16.0, 7),
+    ("09-outro",       7.0, 8),
+]
+
+#: 자막 8줄. `{N}` 은 그날 찍힌 실제 연도 차이로 바꾼다.
+SUBTITLES = {
+    1: "This weather, written {N} years ago.",
+    2: "Almanac matches today's sky with literature.",
+    3: "Weather chooses today's page.",
+    4: "Turn back through time.",
+    5: "Each sky reveals a different page.",
+    6: "One Kotlin core. Five surfaces.",
+    7: "One purchase opens the whole shelf.",
+    8: "Look up. Read back.",
+}
 
 
 def run(args: list[str]) -> None:
@@ -140,15 +172,82 @@ def montage(raw_dir: str, out_path: str) -> None:
              "-y", out_path])
 
 
+def duration(path: str) -> float:
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "csv=p=0", path], capture_output=True, text=True).stdout.strip()
+    return float(out) if out else 0.0
+
+
+def subtitles(out_dir: str, years: str = "179") -> None:
+    """자막 8줄을 전부 PNG 로 굽는다. 편집기에서 바로 얹을 수 있다."""
+    os.makedirs(out_dir, exist_ok=True)
+    for number, text in SUBTITLES.items():
+        line = text.replace("{N}", years)
+        path = render_text(line, 46, "#1A1A1A", out_dir)
+        named = f"{out_dir}/subtitle-{number}.png"
+        os.replace(path, named)
+        print(f"  {number}. {line}")
+
+
+def status(parts_dir: str) -> None:
+    """어느 컷이 있고 어느 컷이 비었는지. 촬영 중에 계속 보게 된다."""
+    total = 0.0
+    for name, length, _ in TIMELINE:
+        path = f"{parts_dir}/{name}.mp4"
+        if os.path.isfile(path):
+            actual = duration(path)
+            mark = "✓" if abs(actual - length) < 0.15 else "!"
+            print(f"  {mark} {name:14s} {length:>5.1f}초  (실제 {actual:.2f})")
+            total += actual
+        else:
+            print(f"  · {name:14s} {length:>5.1f}초  — 없음")
+    planned = sum(length for _, length, _ in TIMELINE)
+    print(f"\n  찍은 것 {total:.2f}초 / 계획 {planned:.1f}초 / 상한 {MAX_SECONDS:.0f}초")
+
+
+def master(parts_dir: str, out_path: str) -> None:
+    """완성된 컷들을 하나로 잇는다. **2분을 넘기면 만들지 않는다.**"""
+    missing = [n for n, _, _ in TIMELINE if not os.path.isfile(f"{parts_dir}/{n}.mp4")]
+    if missing:
+        raise SystemExit("아직 없는 컷: " + ", ".join(missing))
+
+    planned = sum(length for _, length, _ in TIMELINE)
+    if planned > MAX_SECONDS:
+        raise SystemExit(f"콘티가 이미 상한을 넘는다: {planned:.1f}초 > {MAX_SECONDS:.0f}초")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        listing = f"{tmp}/parts.txt"
+        with open(listing, "w") as f:
+            for name, _, _ in TIMELINE:
+                f.write(f"file '{parts_dir}/{name}.mp4'\n")
+        run(["ffmpeg", "-v", "error", "-f", "concat", "-safe", "0",
+             "-i", listing, "-c", "copy", "-y", out_path])
+
+    made = duration(out_path)
+    if made > MAX_SECONDS:
+        os.remove(out_path)
+        raise SystemExit(f"2분을 넘었다: {made:.2f}초. 만들지 않는다.")
+    print(f"\n{out_path}  —  {made:.2f}초 (상한 {MAX_SECONDS:.0f})")
+
+
 def main(argv: list[str]) -> int:
-    if len(argv) < 4 or argv[1] != "montage":
+    if len(argv) < 3:
         print(__doc__.strip(), file=sys.stderr)
         return 2
-    montage(argv[2], argv[3])
-    dur = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-         "-of", "csv=p=0", argv[3]], capture_output=True, text=True).stdout.strip()
-    print(f"\n{argv[3]}  —  {float(dur):.2f}초 (목표 15.00)")
+    cmd = argv[1]
+    if cmd == "montage" and len(argv) >= 4:
+        montage(argv[2], argv[3])
+        print(f"\n{argv[3]}  —  {duration(argv[3]):.2f}초 (목표 15.00)")
+    elif cmd == "subtitles":
+        subtitles(argv[2], argv[3] if len(argv) > 3 else "179")
+    elif cmd == "status":
+        status(argv[2])
+    elif cmd == "master" and len(argv) >= 4:
+        master(argv[2], argv[3])
+    else:
+        print(__doc__.strip(), file=sys.stderr)
+        return 2
     return 0
 
 
