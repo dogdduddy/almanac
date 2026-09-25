@@ -68,7 +68,7 @@ Play Console → 프로모션 → **비구독(일회성 상품) 프로모션**�
 ### 열렸다는 소식은 구매와 같은 경로로 간다
 
 코드가 통하면 `PurchaseState.Unlocked` 로 올라가 페이월의 확인 화면이 받는다 —
-`The shelf is open` / `342 passages are yours now`. 구매로 열린 것과 코드로 열린 것이
+`The shelf is open` / `342 more passages are yours now`. 구매로 열린 것과 코드로 열린 것이
 유저에게 다른 사건일 이유가 없고, 확인 문구도 이미 거기 있다.
 입력란 옆에 남는 것은 **코드 자체의 문제**(모르는 코드, 기간 만료)뿐이다.
 
