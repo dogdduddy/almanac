@@ -796,9 +796,8 @@ private fun AboutScreen(
         )
         Section(
             "Sources",
-            "English passages come from Project Gutenberg. Japanese passages come from " +
-                "Aozora Bunko. Only works written originally in those languages are used — " +
-                "translations carry their own copyright.",
+            "Every passage comes from Project Gutenberg. Only works written originally " +
+                "in English are used — translations carry their own copyright.",
         )
         Section("Weather", MetNorwayClient.ATTRIBUTION)
         Section(
@@ -973,15 +972,16 @@ private fun PaywallScreen(
                         PaywallButton(
                             label = when {
                                 working -> "Opening the store…"
-                                product.displayPrice != null -> "Buy · ${product.displayPrice}"
-                                else -> "Buy"
+                                product.displayPrice != null ->
+                                    "Open the full shelf · ${product.displayPrice}"
+                                else -> "Open the full shelf"
                             },
                             enabled = !working,
                             onClick = { onPurchase(product) },
                         )
                     }
                     Text(
-                        text = "One time. Not a subscription.",
+                        text = "One-time purchase. No subscription.",
                         fontSize = 13.sp,
                         fontFamily = Serif,
                         color = Muted,
@@ -1021,7 +1021,8 @@ private fun unlockedMessage(state: PurchaseState.Unlocked): String = when {
         "Your previous purchase is back on the shelf. Nothing was charged."
 
     state.entryCount > 0 ->
-        "${state.entryCount} passages are yours now — every weather, every hour of the day."
+        "${state.entryCount} more passages are yours now — " +
+            "every weather, every hour of the day."
 
     else ->
         "The full collection is yours now — every weather, every hour of the day."
@@ -1151,7 +1152,7 @@ private fun RedeemSection(onRedeemCode: (String) -> RedeemOutcome, enabled: Bool
         )
 
         PaywallButton(
-            label = "Open the shelf",
+            label = "Redeem",
             enabled = enabled && code.isNotBlank(),
             onClick = {
                 when (val outcome = onRedeemCode(code)) {
