@@ -97,13 +97,15 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * 촬영용 조건 고정 창구. **디버그 빌드에서만 만든다.**
+     * 촬영용 조건 고정 창구. **debug 와 demo 빌드에만 만든다.**
      *
-     * 릴리스에서는 null 이라 About 화면의 진입 줄 자체가 없다. 고정 자체는 shared 에
-     * 남지만 아무도 값을 넣지 않으므로 경로가 죽는다.
+     * `BuildConfig.DEBUG` 가 아니라 전용 플래그를 보는 이유는 촬영 빌드 때문이다 —
+     * demo 는 release 의 최적화를 쓰면서 이 메뉴가 있어야 한다 (build.gradle.kts 참고).
+     *
+     * 스토어로 나가는 release 에서는 null 이라 About 의 진입 줄 자체가 없다.
      */
     private fun demoActions(): DemoActions? =
-        if (!BuildConfig.DEBUG) null
+        if (!BuildConfig.DEMO_TOOLS) null
         else DemoActions(
             controls = AlmanacGraph.demo,
             onApply = loader::refresh,

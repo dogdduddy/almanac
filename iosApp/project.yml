@@ -7,6 +7,19 @@
 
 name: Almanac
 
+# Debug / Release 외에 **촬영 전용 구성**을 하나 더 둔다.
+#
+# 이게 없으면 데모 영상의 디자인 장면을 Debug 로 찍게 된다. 역방향 넘김과 날씨별 등장
+# 애니메이션은 최적화된 바이너리라야 제 모습이 나오는데, 날씨·시드를 고정하려면 촬영
+# 메뉴가 필요하다 — `#if DEBUG` 로만 가르면 둘을 동시에 얻을 수 없다.
+#
+# DemoRelease 는 release 최적화를 쓰고 DEMO_TOOLS 플래그만 더한다.
+# 제출용 아카이브는 Release 로 만든다 — 거기에는 이 플래그가 없다.
+configs:
+  Debug: debug
+  DemoRelease: release
+  Release: release
+
 options:
   bundleIdPrefix: com.dogdduddy
   deploymentTarget:
@@ -84,6 +97,14 @@ targets:
         # 서명을 끄면(CODE_SIGNING_REQUIRED: NO) Xcode 가 엔타이틀먼트 처리 단계를
         # 통째로 건너뛴다. 그러면 App Group 이 안 붙고, 증상은 "컨테이너 조회가 nil" 로
         # 나타나 DB 가 앱 전용 경로에 생긴다. 시뮬레이터 기본 ad-hoc 서명에 맡긴다.
+      configs:
+        DemoRelease:
+          # Swift 의 `#if DEMO_TOOLS` 가 이걸 본다 (ComposeView.swift).
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) DEMO_TOOLS
+          # KMP 는 CONFIGURATION **이름**으로 빌드 타입을 고른다. 'DemoRelease' 는
+          # Debug/Release 어느 쪽과도 이름이 같지 않아 못 고르므로 직접 알려준다.
+          # 빼면 embedAndSignAppleFrameworkForXcode 가 빌드 타입을 못 찾고 실패한다.
+          KOTLIN_FRAMEWORK_BUILD_TYPE: release
 
     preBuildScripts:
       - name: Compile Kotlin framework
@@ -168,6 +189,11 @@ targets:
         # 서명을 끄면(CODE_SIGNING_REQUIRED: NO) Xcode 가 엔타이틀먼트 처리 단계를
         # 통째로 건너뛴다. 그러면 App Group 이 안 붙고, 증상은 "컨테이너 조회가 nil" 로
         # 나타나 DB 가 앱 전용 경로에 생긴다. 시뮬레이터 기본 ad-hoc 서명에 맡긴다.
+      configs:
+        DemoRelease:
+          # 위젯도 :shared 프레임워크를 직접 빌드한다. 앱 타깃과 같은 힌트가 필요하다.
+          # (위젯 자체에는 촬영 메뉴가 없다 — 익스텐션은 UI 를 공유하지 않는다)
+          KOTLIN_FRAMEWORK_BUILD_TYPE: release
 
     preBuildScripts:
       - name: Compile Kotlin framework

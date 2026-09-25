@@ -63,9 +63,38 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField("boolean", "DEMO_TOOLS", "true")
+        }
+
         release {
             isMinifyEnabled = false
+            buildConfigField("boolean", "DEMO_TOOLS", "false")
             signingConfigs.findByName("release")?.let { signingConfig = it }
+        }
+
+        /**
+         * **촬영 전용 빌드.** release 의 최적화를 그대로 쓰되 촬영 메뉴를 넣는다.
+         *
+         * 이게 없으면 데모 영상의 디자인 장면을 가장 느린 빌드로 찍게 된다.
+         * 역방향 넘김과 날씨별 등장 애니메이션은 Release 성능이 있어야 제 모습이 나오는데,
+         * 날씨·시드를 고정하려면 촬영 메뉴가 필요하다 — debug 로만 가르면 둘을 동시에 못 얻는다.
+         *
+         *   ./gradlew :androidApp:assembleDemo
+         *
+         * **스토어에는 이 빌드를 올리지 않는다.** versionName 에 `-demo` 가 붙어
+         * Play Console 업로드 화면에서 바로 보이고, 릴리스 게이트
+         * (checkReleaseBillingKey, verifyContentDb)는 assembleRelease/bundleRelease 에만
+         * 걸려 있으므로 이 빌드는 그것들을 타지 않는다. 결제도 필요 없다 —
+         * 구매 장면은 테스트 트랙에서 설치한 스토어 빌드로 찍는다.
+         */
+        create("demo") {
+            initWith(getByName("release"))
+            buildConfigField("boolean", "DEMO_TOOLS", "true")
+            versionNameSuffix = "-demo"
+            // 서명이 없으면 설치가 안 된다. 릴리스 키가 없는 머신에서는 디버그 키로 떨어진다.
+            signingConfig = signingConfigs.findByName("release")
+                ?: signingConfigs.getByName("debug")
         }
     }
 
@@ -163,7 +192,7 @@ tasks.matching { it.name == "assembleRelease" || it.name == "bundleRelease" }
 val composeFontAssetPath =
     "composeResources/com.dogdduddy.almanac.resources/font/crimson_text.ttf"
 
-listOf("Debug", "Release").forEach { variant ->
+listOf("Debug", "Demo", "Release").forEach { variant ->
     val mergedAssets = layout.buildDirectory
         .dir("intermediates/assets/${variant.replaceFirstChar { it.lowercase() }}/merge${variant}Assets")
     val expected = composeFontAssetPath
