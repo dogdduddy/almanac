@@ -119,6 +119,7 @@ class MainActivity : ComponentActivity() {
             controls = AlmanacGraph.demo,
             onApply = loader::refresh,
             onResetHistory = loader::resetHistory,
+            onFillArchive = loader::fillArchive,
         )
 
     private fun publishState(next: AppState) {

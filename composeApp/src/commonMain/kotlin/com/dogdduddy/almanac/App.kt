@@ -128,6 +128,8 @@ data class DemoActions(
     val onApply: () -> Unit,
     /** 표시 이력을 지운다. 분할 화면에서 두 기기의 출발선을 맞출 때 쓴다. */
     val onResetHistory: () -> Unit,
+    /** 지난 날짜의 페이지를 채운다. 역방향 넘김 컷에 넘길 과거가 필요하다. */
+    val onFillArchive: () -> Unit,
 )
 
 private enum class Screen { PAGES, CITIES, ABOUT, PAYWALL, DEMO }
@@ -1244,9 +1246,13 @@ private fun DemoScreen(demo: DemoActions, onBack: () -> Unit) {
         DemoRow("Shared seed", selected = seedShared) {
             apply { installId = DemoControls.SHARED_SEED_INSTALL_ID }
         }
+
+        DemoGroupLabel("Archive")
+        // 역방향 넘김 컷에는 넘길 과거가 있어야 한다. 새로 설치한 기기에는 없다.
+        DemoRow("Fill the archive", selected = false) { demo.onFillArchive() }
         // 슬롯은 (날짜, 시간대, 위치) 로 한 번 고정되면 시드를 바꿔도 다시 고르지 않는다.
         // 그게 평소에는 옳지만(문장이 뒤집히지 않는다) 여기서는 "바꿨는데 왜 그대로지" 로
-        // 보인다. 그래서 지우는 줄을 같은 묶음에 둔다.
+        // 보인다. 그래서 지우는 줄을 시드 바로 아래에 둔다.
         DemoRow("Clear the archive", selected = false) { demo.onResetHistory() }
         Text(
             text = "Both devices need the shared seed, then a cleared archive. " +

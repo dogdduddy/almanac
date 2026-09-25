@@ -1,6 +1,7 @@
 package com.dogdduddy.almanac
 
 import com.dogdduddy.almanac.core.TimeOfDay
+import com.dogdduddy.almanac.core.fnv1a64
 import com.dogdduddy.almanac.core.randomUuid
 import com.dogdduddy.almanac.billing.Billing
 import com.dogdduddy.almanac.billing.BillingProduct
@@ -15,6 +16,7 @@ import com.dogdduddy.almanac.location.LocationMode
 import com.dogdduddy.almanac.location.LocationRepository
 import com.dogdduddy.almanac.location.ResolvedLocation
 import com.dogdduddy.almanac.weather.DeviceClock
+import com.dogdduddy.almanac.weather.LocationKey
 import com.dogdduddy.almanac.weather.WeatherRepository
 import com.dogdduddy.almanac.weather.civilFromDays
 
@@ -262,6 +264,62 @@ class AlmanacService(
      */
     fun resetHistory() = content.clearHistory()
 
+    /**
+     * **디버그 빌드 전용.** 지난 날짜의 페이지를 채워 아카이브를 만든다.
+     *
+     * 역방향 넘김 컷(#4)이 이걸 필요로 한다. 새로 설치한 기기에는 넘길 과거가 없고,
+     * 촬영 메뉴로 시간대만 바꿔 쌓으면 **기록이 전부 오늘 날짜에 몰려** 과거로
+     * 되돌아가는 느낌이 죽는다.
+     *
+     * **앱의 진짜 선택 엔진을 과거 날짜로 돌린다.** 손으로 entry_id 를 박아 넣으면
+     * 앱이 고르지 않았을 문장이 화면에 뜬다. 이렇게 하면 나오는 것은
+     * "그날 날씨가 이랬다면 이 기기가 보여줬을 바로 그 문장" 이다.
+     *
+     * **다만 과거 날씨는 지어낸 값이다.** MET Norway 무료 API 는 예보만 주고 과거
+     * 관측을 주지 않는다. 날짜와 문장과 그 선택은 진짜이고, 날씨 배열만 합성이다.
+     *
+     * 오래된 날부터 채운다 — 실제로 쌓인 것과 같은 순서라야 균등 노출 필터가
+     * 같은 방식으로 작동한다.
+     *
+     * @return 실제로 채워진 페이지 수
+     */
+    fun seedArchive(days: Int = DEMO_ARCHIVE_DAYS, language: String = "en"): Int {
+        // 보유 팩이 비면 선택이 즉시 null 이라 한 장도 안 생긴다.
+        // 평소에는 todaysPage 가 먼저 지급하지만, 여기가 그 순서에 기대면 안 된다.
+        content.ensureBaseEntitlement()
+
+        val place = location.current()
+        val locationKey = LocationKey.format(
+            place.coordinates.latitude, place.coordinates.longitude
+        )
+        val installId = content.installId { newInstallId() }
+        val now = clock.nowEpochSeconds()
+
+        var made = 0
+        for (dayBack in days downTo 1) {
+            val dateKey = clock.localDateKey(now - dayBack * SECONDS_PER_DAY)
+            for (timeOfDay in TimeOfDay.entries) {
+                val seed = fnv1a64("$dateKey|${timeOfDay.key}")
+                // 하루 세 칸을 매일 꽉 채우지 않는다. 빈틈이 있어야 사람이 읽은
+                // 기록처럼 보이고, 넘길 때 날짜가 자연스럽게 건너뛴다.
+                if (seed % 3uL == 0uL) continue
+
+                val resolved = content.resolvePage(
+                    dateKey = dateKey,
+                    timeOfDay = timeOfDay,
+                    weatherGroup = pastWeather(seed),
+                    language = language,
+                    locationKey = locationKey,
+                    windFlag = false,
+                    installId = installId,
+                    countAsRead = true,
+                )
+                if (resolved != null) made++
+            }
+        }
+        return made
+    }
+
     // ---- 위치 선택 -----------------------------------------------------------
 
     fun currentPlace(): ResolvedLocation = location.current()
@@ -317,6 +375,29 @@ private fun ResolvedPage.toTodaysPage(
     dateKey = dateKey,
     isToday = true,
 )
+
+/** 하루. 과거 날짜를 되짚는 데 쓴다. */
+private const val SECONDS_PER_DAY = 86_400L
+
+/** 촬영용 아카이브를 며칠 치 채울지. 3주면 넘기는 컷에 충분하고도 남는다. */
+const val DEMO_ARCHIVE_DAYS = 21
+
+/**
+ * 촬영용 과거 날씨.
+ *
+ * **관측값이 아니다.** 흔한 날씨가 자주 나오도록 가중치를 준 목록에서 고른다 —
+ * 뇌우와 눈이 사흘에 한 번씩 오는 아카이브는 넘길 때 바로 가짜로 읽힌다.
+ */
+private fun pastWeather(seed: ULong): WeatherGroup {
+    val weighted = listOf(
+        WeatherGroup.CLEAR, WeatherGroup.CLEAR, WeatherGroup.CLEAR,
+        WeatherGroup.CLOUDY, WeatherGroup.CLOUDY, WeatherGroup.CLOUDY,
+        WeatherGroup.RAIN, WeatherGroup.RAIN,
+        WeatherGroup.FOG, WeatherGroup.WIND, WeatherGroup.DRIZZLE,
+        WeatherGroup.SNOW, WeatherGroup.THUNDER,
+    )
+    return weighted[((seed / 3uL) % weighted.size.toULong()).toInt()]
+}
 
 internal fun currentYear(clock: DeviceClock): Int {
     val key = clock.localDateKey(clock.nowEpochSeconds())

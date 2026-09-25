@@ -145,6 +145,18 @@ class AppLoader(
     }
 
     /**
+     * **디버그 빌드 전용.** 지난 날짜의 페이지를 채운다 (역방향 넘김 컷용).
+     *
+     * 수십 번의 DB 쓰기라 코루틴으로 보낸다 — 도시 선택처럼 한 번으로 끝나지 않는다.
+     */
+    fun fillArchive() {
+        scope.launch {
+            runCatching { service().seedArchive() }
+            draw(refreshLocation = false, countAsRead = true)
+        }
+    }
+
+    /**
      * 구매를 시작하고 **결과를 화면에 남긴다.**
      *
      * 예전에는 `runCatching { entitlements().purchase(product) }` 한 줄이 반환값과

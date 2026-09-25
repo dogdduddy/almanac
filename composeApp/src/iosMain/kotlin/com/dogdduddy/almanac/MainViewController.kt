@@ -90,6 +90,7 @@ fun MainViewController(demoTools: Boolean = false): UIViewController = ComposeUI
                 controls = IosAlmanacGraph.demo,
                 onApply = loader::refresh,
                 onResetHistory = loader::resetHistory,
+                onFillArchive = loader::fillArchive,
             ),
         ),
     )

@@ -86,6 +86,7 @@ private fun demoActions(loader: AppLoader): DemoActions? =
         controls = DesktopAlmanacGraph.demo,
         onApply = loader::refresh,
         onResetHistory = loader::resetHistory,
+        onFillArchive = loader::fillArchive,
     )
 
 private fun openInBrowser(url: String) {
