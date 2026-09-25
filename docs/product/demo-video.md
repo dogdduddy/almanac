@@ -179,17 +179,38 @@ demo 빌드(iOS 는 DemoRelease, 데스크톱은 `-Palmanac.demo=true`) →
 컷 하나가 명령 한 줄이다. 마음에 안 드는 컷은 그 컷만 다시 돌리면 되고 결과는 매번 같다.
 
 ```bash
-export ALMANAC_DEVICE=<adb 기기>
-
+export ALMANAC_DEVICE=<adb 기기>                            # Android
 python3 scripts/record_demo.py montage <녹화 디렉터리>      # #5 일곱 컷
-python3 scripts/cut_demo.py  montage <녹화> <출력.mp4>      # 정확히 15.00초로 조립
-python3 scripts/cut_demo.py  subtitles <출력 디렉터리>      # 자막 8장
-python3 scripts/cut_demo.py  status <컷 디렉터리>           # 어디까지 찍었나
-python3 scripts/cut_demo.py  master <컷 디렉터리> <출력>    # 전체 이어붙이기
+
+python3 scripts/ios_record.py cold  <출력.mp4> [초]         # iOS — 찬 시작
+python3 scripts/ios_record.py hold  <출력.mp4> [초]         # iOS — 지금 화면
+python3 scripts/ios_record.py start <출력.mp4>              # iOS — 조작하며 녹화
+python3 scripts/ios_record.py stop
+
+python3 scripts/cut_demo.py cut <컷 이름> <녹화 뿌리> <컷 디렉터리>
+python3 scripts/cut_demo.py montage <녹화> <출력.mp4>       # 정확히 15.00초로 조립
+python3 scripts/cut_demo.py subtitles <출력 디렉터리>       # 자막 8장
+python3 scripts/cut_demo.py status <컷 디렉터리>            # 어디까지 찍었나
+python3 scripts/cut_demo.py preview <컷 디렉터리> <출력>    # 찍은 것만 이어보기
+python3 scripts/cut_demo.py master <컷 디렉터리> <출력>     # 전체 이어붙이기
 swift scripts/render_card.swift <폰트> <출력.png>           # #7 구조 카드
 ```
 
+컷마다 **원본의 어디서부터 쓰는지**는 `cut_demo.py` 의 `SOURCES` 에 적혀 있다.
+자막과 카메라 움직임도 거기서 자동으로 붙으므로 `cut` 한 번이 완성된 한 컷이다.
+
 `master` 는 **2분을 넘기면 만들지 않는다.** 상한이 대회 규정이므로 사람이 기억할 일이 아니다.
+
+### iOS 는 조작과 녹화를 나눈다
+
+`simctl` 에는 탭이 없다. 그래서 `ios_record.py` 는 **녹화와 앱 수명만** 맡고
+화면을 누르는 일은 바깥(시뮬레이터 제어 도구)에서 한다. 그 경계 덕분에 컷은
+여전히 결정적이다 — 녹화의 시작·종료는 `simctl` 이 쥐고, 탭은 녹화 앞이나
+`start`/`stop` 사이에서만 일어난다.
+
+**두 기기를 한 영상에 섞는다.** 시스템 영역을 걷어내면 남는 것은 앱 화면뿐이라
+Galaxy 와 iPhone 이 나란히 붙어도 티가 안 난다. 크롭 값은 녹화 해상도로 고른다
+(`DEVICE_CROP`) — 파일이 스스로 어느 기기에서 왔는지 말한다.
 
 ### 찍으면서 알게 된 것
 
@@ -200,6 +221,17 @@ swift scripts/render_card.swift <폰트> <출력.png>           # #7 구조 카�
   파일 안의 시각은 벽시계와 다르고, 문장이 다 놓인 뒤의 정적은 편집에서 만들어야 한다
 - **화면 맨 아래 요소를 그냥 누르면 탭이 시스템 내비게이션 바로 간다.**
   About 의 `Demo controls` 가 정확히 그 자리다
+- **`simctl` 도 정지 화면은 담지 못한다.** 8초를 녹화해도 파일이 0.07초로 나온다.
+  #2 와 #9 처럼 화면이 멈춰 있는 컷은 **스크린샷 한 장**이 원본이고 움직임은
+  편집이 만든다. #7 구조 카드도 같은 길로 타임라인에 들어간다
+- **앱 화면이 하나뿐이라 #1 #2 #3 이 전부 오늘 페이지다.** 그대로 이으면 앞 26초가
+  같은 그림이다. 그래서 #2 는 물러나고 #3 은 들어간다 (`MOVES`). 다만 **배율 상한은
+  본문 폭이 정한다** — 1.3 배로 걸었더니 `The Enchanted April` 이 `e Enchanted April`
+  이 됐다. 본문이 화면 폭의 89% 를 쓰므로 1.12 가 한계다
+- **위치를 바꿔도 위젯은 따라오지 않는다.** iOS 앱이 `WidgetCenter.reloadAllTimelines()`
+  를 부르지 않아서, 도시를 바꾸면 위젯이 최대 한 시간 동안 이전 도시의 문장을 들고 있다.
+  #6 은 앱과 위젯이 같은 문장임을 증명하는 컷이라 **찍기 전에 시뮬레이터를 재부팅**해
+  타임라인을 다시 만들게 했다. 앱 쪽 고침은 따로 잡아야 한다
 - 자막은 ffmpeg 이 아니라 **CoreText** 로 굽는다. 이 머신의 ffmpeg 에는 drawtext 도
   subtitles 도 없고, 있었더라도 앱과 같은 엔진으로 조판하는 편이 낫다
 

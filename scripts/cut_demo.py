@@ -17,6 +17,7 @@
     python3 scripts/cut_demo.py montage   <녹화 디렉터리> <출력.mp4>   # #5 조립
     python3 scripts/cut_demo.py subtitles <출력 디렉터리> [연도차]      # 자막 8장
     python3 scripts/cut_demo.py status    <컷 디렉터리>                # 진행 상황
+    python3 scripts/cut_demo.py preview   <컷 디렉터리> <출력.mp4>      # 찍은 것만 잇기
     python3 scripts/cut_demo.py master    <컷 디렉터리> <출력.mp4>      # 전체 이어붙이기
 
 의존성: ffmpeg, swift(자막 렌더).
@@ -102,6 +103,28 @@ SOURCES = {
     "09-outro":     ("raw-ios/09-outro.png",     0.00),
 }
 
+#: 컷 안의 카메라 움직임. (시작 배율, 끝 배율, 가로 초점, 세로 초점)
+#:
+#: **이게 없으면 앞 26초가 같은 화면이다.** 앱 화면은 하나뿐이라 #1 #2 #3 이
+#: 전부 오늘 페이지다. 콘티가 #2 를 "화면이 오늘 페이지 전체로 물러나며",
+#: #3 을 "날씨 칩 → 발췌문" 이라고 적은 것은 그래서다 — 화면이 아니라
+#: **프레임이** 움직여서 세 컷을 가른다.
+#:
+#: 초점은 0~1 의 정규 좌표다. 날씨 줄은 위에서 10% 쯤에 있다.
+#:
+#: **배율의 상한은 본문 폭이 정한다.** 확대는 가로세로를 같이 자르는데, 본문이
+#: 화면 폭의 89% 를 쓰고 있어서 1.12 를 넘기면 줄 끝의 글자가 잘린다. 1.3 으로
+#: 걸어 보니 `The Enchanted April` 이 `e Enchanted April` 이 됐다 — 의도한
+#: 프레이밍이 아니라 실수로 보인다. 그래서 움직임은 작고, 대신 느리다.
+MOVES = {
+    "02-pitch":    (1.12, 1.00, 0.5, 0.10),   # 날씨 줄에서 페이지 전체로 물러난다
+    "03-matching": (1.00, 1.12, 0.5, 0.10),   # 페이지에서 날씨 줄로 들어간다
+}
+
+#: 화면에 찍힌 연도 차이. **자막이 화면과 다르면 그게 제일 먼저 보인다.**
+#: 2026-09-25 서울, 비 → The Enchanted April (1922) → 104.
+YEARS = "104"
+
 #: 자막 8줄. `{N}` 은 그날 찍힌 실제 연도 차이로 바꾼다.
 SUBTITLES = {
     1: "This weather, written {N} years ago.",
@@ -161,7 +184,9 @@ def crop_for(path: str) -> tuple[int, int]:
 
 
 def prepare_cut(src: str, dst: str, *, start: float, length: float,
-                label: str | None, cache_dir: str) -> None:
+                label: str | None, cache_dir: str,
+                subtitle: str | None = None,
+                move: tuple[float, float, float, float] | None = None) -> None:
     """한 컷: 잘라내기 → 시스템 영역 제거 → 16:9 종이 위에 올리기 → 구석 라벨.
 
     원본은 녹화일 수도 **정지화면일 수도** 있다. 화면이 멈춰 있는 컷(#2 #9, #7 의
@@ -179,18 +204,46 @@ def prepare_cut(src: str, dst: str, *, start: float, length: float,
     # trim + setpts 는 그런 여지가 없다.
     # 정지화면은 잘라낼 앞부분이 없다. `-loop` 이 길이를 만들고 `-t` 가 끊는다.
     head = "[0:v]" if still else f"[0:v]trim=start={start},setpts=PTS-STARTPTS,"
+    # 카메라 움직임은 **줄이기 전에** 건다. 558px 로 줄인 뒤에 확대하면 뭉개진다.
+    pan = ""
+    if move:
+        z0, z1, cx, cy = move
+        frames = int(round(length * 60))
+        pan = (
+            f"zoompan=z='{z0}+({z1}-{z0})*on/{max(frames - 1, 1)}'"
+            f":x='(iw-iw/zoom)*{cx}':y='(ih-ih/zoom)*{cy}'"
+            f":d=1:s={{W}}x{{H}}:fps=60,"
+        )
+
     base = (
         f"{head}"
         f"crop=in_w:in_h-{crop_top + crop_bottom}:0:{crop_top},"
+        f"{pan}"
         f"scale=-2:{OUT_H},"
         f"pad={OUT_W}:{OUT_H}:(ow-iw)/2:0:color={PAPER},"
         f"fps=60,tpad=stop_mode=clone:stop_duration=8"
     )
+    if move:
+        w, h = frame_size(src)
+        base = base.replace("{W}", str(w)).replace("{H}", str(h - crop_top - crop_bottom))
+
     inputs = (["-loop", "1", "-framerate", "60", "-t", f"{length + 1}", "-i", src]
               if still else ["-i", src])
+    # 얹을 것을 순서대로 모은다. 구석 라벨은 왼쪽 위, 자막은 아래 가운데다.
+    overlays = []
     if label:
-        inputs += ["-i", render_text(label, 34, "#8A8378", cache_dir)]
-        chain = f"{base}[bg];[bg][1:v]overlay=x=W*0.06:y=H*0.08,format=yuv420p"
+        overlays.append((render_text(label, 34, "#8A8378", cache_dir),
+                         "x=W*0.06:y=H*0.08"))
+    if subtitle:
+        overlays.append((render_text(subtitle, 46, "#1A1A1A", cache_dir),
+                         "x=(W-w)/2:y=H-H*0.14"))
+    if overlays:
+        chain = f"{base}[v0];"
+        for i, (png, pos) in enumerate(overlays):
+            inputs += ["-i", png]
+            last = i == len(overlays) - 1
+            tail = ",format=yuv420p" if last else f"[v{i + 1}];"
+            chain += f"[v{i}][{i + 1}:v]overlay={pos}{tail}"
     else:
         chain = f"{base},format=yuv420p"
     run([
@@ -244,11 +297,15 @@ def cut(name: str, raw_root: str, parts_dir: str) -> None:
     if not os.path.isfile(src):
         raise SystemExit(f"녹화가 없다: {src}")
 
+    numbers = {n: number for n, _, number in TIMELINE}
+    line = SUBTITLES[numbers[name]].replace("{N}", YEARS) if numbers[name] else None
+
     os.makedirs(parts_dir, exist_ok=True)
     dst = f"{parts_dir}/{name}.mp4"
     with tempfile.TemporaryDirectory() as tmp:
         prepare_cut(src, dst, start=start, length=lengths[name],
-                    label=None, cache_dir=tmp)
+                    label=None, cache_dir=tmp, subtitle=line,
+                    move=MOVES.get(name))
     made = duration(dst)
     mark = "✓" if abs(made - lengths[name]) < 0.15 else "!"
     print(f"  {mark} {name}  {lengths[name]:.1f}초 (실제 {made:.2f})  ← {rel} @ {start}초")
@@ -261,7 +318,7 @@ def duration(path: str) -> float:
     return float(out) if out else 0.0
 
 
-def subtitles(out_dir: str, years: str = "179") -> None:
+def subtitles(out_dir: str, years: str = YEARS) -> None:
     """자막 8줄을 전부 PNG 로 굽는다. 편집기에서 바로 얹을 수 있다."""
     os.makedirs(out_dir, exist_ok=True)
     for number, text in SUBTITLES.items():
@@ -286,6 +343,30 @@ def status(parts_dir: str) -> None:
             print(f"  · {name:14s} {length:>5.1f}초  — 없음")
     planned = sum(length for _, length, _ in TIMELINE)
     print(f"\n  찍은 것 {total:.2f}초 / 계획 {planned:.1f}초 / 상한 {MAX_SECONDS:.0f}초")
+
+
+def preview(parts_dir: str, out_path: str) -> None:
+    """**찍은 것만** 순서대로 이어붙인다. 촬영 중에 흐름을 보려고 만든다.
+
+    `master` 와 달리 빠진 컷을 기다리지 않는다. 대신 무엇이 빠졌는지 말한다 —
+    조용히 짧은 영상을 내놓으면 그게 완성본인 줄 알게 된다.
+    """
+    have = [n for n, _, _ in TIMELINE if os.path.isfile(f"{parts_dir}/{n}.mp4")]
+    missing = [n for n, _, _ in TIMELINE if n not in have]
+    if not have:
+        raise SystemExit("찍은 컷이 하나도 없다.")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        listing = f"{tmp}/parts.txt"
+        with open(listing, "w") as f:
+            for name in have:
+                f.write(f"file '{parts_dir}/{name}.mp4'\n")
+        run(["ffmpeg", "-v", "error", "-f", "concat", "-safe", "0",
+             "-i", listing, "-c", "copy", "-y", out_path])
+
+    print(f"{out_path}  —  {duration(out_path):.2f}초 ({len(have)}/{len(TIMELINE)} 컷)")
+    if missing:
+        print("아직 없는 컷: " + ", ".join(missing))
 
 
 def master(parts_dir: str, out_path: str) -> None:
@@ -324,9 +405,11 @@ def main(argv: list[str]) -> int:
         montage(argv[2], argv[3])
         print(f"\n{argv[3]}  —  {duration(argv[3]):.2f}초 (목표 15.00)")
     elif cmd == "subtitles":
-        subtitles(argv[2], argv[3] if len(argv) > 3 else "179")
+        subtitles(argv[2], argv[3] if len(argv) > 3 else YEARS)
     elif cmd == "status":
         status(argv[2])
+    elif cmd == "preview" and len(argv) >= 4:
+        preview(argv[2], argv[3])
     elif cmd == "master" and len(argv) >= 4:
         master(argv[2], argv[3])
     else:
