@@ -1,6 +1,7 @@
 package com.dogdduddy.almanac
 
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -11,6 +12,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import com.dogdduddy.almanac.billing.createIosBilling
 import platform.UIKit.UIViewController
+import platform.UIKit.UIApplicationDidBecomeActiveNotification
+import platform.Foundation.NSNotificationCenter
 
 /**
  * iOS 진입점. SwiftUI 가 이걸 감싸서 띄운다.
@@ -51,6 +54,20 @@ fun MainViewController(demoTools: Boolean = false): UIViewController = ComposeUI
         // 이 값을 붙들기 때문에, 늦으면 결제가 PreviewBilling 으로 조용히 죽는다.
         IosAlmanacGraph.billing = createIosBilling()
         loader.start()
+    }
+
+    DisposableEffect(loader) {
+        // App Store 의 Offer Code 사용 화면에서 돌아오면 엔티틀먼트를 다시 받아
+        // 즉시 서가를 연다. 첫 활성화에서도 한 번 더 호출될 수 있지만 동기화는
+        // 멱등이고, 초기 알림을 놓쳤다고 실제 복귀를 건너뛰는 것보다 안전하다.
+        val observer = NSNotificationCenter.defaultCenter.addObserverForName(
+            name = UIApplicationDidBecomeActiveNotification,
+            `object` = null,
+            queue = null,
+        ) {
+            loader.storeMayHaveChanged()
+        }
+        onDispose { NSNotificationCenter.defaultCenter.removeObserver(observer) }
     }
 
     App(

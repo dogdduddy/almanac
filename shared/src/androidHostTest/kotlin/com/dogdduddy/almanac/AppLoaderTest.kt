@@ -350,6 +350,30 @@ class AppLoaderTest {
         )
     }
 
+    /** 스토어 앱에서 코드를 쓴 뒤 돌아오면 재실행 없이 유료 팩이 열린다. */
+    @Test
+    fun `포그라운드 복귀는 바깥에서 생긴 entitlement 를 동기화한다`() = runTest {
+        val returning = ReturningFromStoreBilling()
+        billing = returning
+        entitlements = EntitlementSync(repository, billing)
+        val loader = loader()
+
+        loader.start()
+        location.complete(Coordinates(37.5665, 126.9780))
+        advanceUntilIdle()
+        assertTrue("core-2026" !in repository.ownedPackIds())
+
+        // App Store / Play Store 에서 Offer Code 또는 프로모션 코드를 사용한 상태.
+        returning.entitled = setOf("core-2026")
+        loader.storeMayHaveChanged()
+        advanceUntilIdle()
+
+        assertTrue("core-2026" in repository.ownedPackIds())
+        val last = states.last()
+        assertIs<AppState.Ready>(last)
+        assertTrue(!last.hasLockedPacks, "앱을 재시작하지 않아도 서가가 열려야 한다")
+    }
+
     /** 확인하고 닫았으면 비운다. 안 비우면 다음에 페이월을 열 때 지난 실패가 그대로 있다. */
     @Test
     fun `결과를 확인하면 상태가 비워진다`() = runTest {
@@ -520,6 +544,16 @@ private class ScriptedBilling(
     override suspend fun entitledPackIds(): Set<String> = emptySet()
     override suspend fun purchase(product: BillingProduct): PurchaseOutcome = outcome
     override suspend fun restore(): Set<String> = restorable
+}
+
+/** 앱 밖의 스토어 화면에서 권한이 생기는 흐름을 흉내 낸다. */
+private class ReturningFromStoreBilling : Billing {
+    var entitled: Set<String> = emptySet()
+
+    override suspend fun products(): List<BillingProduct> = emptyList()
+    override suspend fun entitledPackIds(): Set<String> = entitled
+    override suspend fun purchase(product: BillingProduct): PurchaseOutcome = PurchaseOutcome.Cancelled
+    override suspend fun restore(): Set<String> = entitled
 }
 
 /** 늦게 답하는 결제 백엔드. 상한이 실제로 걸려 있는지 재는 데 쓴다. */

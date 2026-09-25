@@ -20,6 +20,7 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
 
     private var state by mutableStateOf<AppState>(AppState.Loading)
+    private var hasResumedOnce = false
 
     /**
      * 앱이 새 페이지를 그리면 홈 화면 위젯도 같은 저장 위치와 슬롯으로 다시 그린다.
@@ -94,6 +95,14 @@ class MainActivity : ComponentActivity() {
         if (!source.hasPermission()) {
             requestLocation.launch(android.Manifest.permission.ACCESS_COARSE_LOCATION)
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // 첫 onResume 은 start() 의 초기 동기화가 처리한다. 그 뒤의 복귀는 Play Store
+        // 에서 프로모션 코드를 사용했거나 구매 상태가 바뀐 경우일 수 있다.
+        if (hasResumedOnce) loader.storeMayHaveChanged()
+        else hasResumedOnce = true
     }
 
     /**

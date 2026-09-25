@@ -104,6 +104,18 @@ class AppLoader(
     fun refresh() = redraw()
 
     /**
+     * 앱 밖에서 스토어 상태가 바뀌었을 수 있을 때 다시 맞춘다.
+     *
+     * iOS Offer Code 와 Google Play 프로모션 코드는 App Store / Play Store 앱에서
+     * 사용할 수 있다. 사용자가 Almanac 으로 돌아왔을 때 이 경로를 부르지 않으면,
+     * 권한은 이미 생겼는데 화면과 위젯은 앱을 완전히 다시 켤 때까지 잠긴 채 남는다.
+     * 첫 화면을 다시 만들 필요는 없으므로 위치를 새로 묻지 않고 스토어만 갱신한다.
+     */
+    fun storeMayHaveChanged() {
+        scope.launch { syncStore() }
+    }
+
+    /**
      * 프로모션 코드. **스토어 코드가 없을 때 쓰는 비상구다.**
      *
      * 결과를 그 자리에서 돌려주는 이유는 입력란이 코드 자체의 문제(모르는 코드 등)를
