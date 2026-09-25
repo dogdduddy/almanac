@@ -168,6 +168,7 @@ fun App(state: AppState, actions: AppActions = AppActions()) {
                     onRestore = actions.onRestore,
                     onRedeemCode = actions.onRedeemCode,
                     onBack = { actions.onPurchaseAcknowledged(); screen = Screen.PAGES },
+                    shelfNote = actions.shelfNote,
                 )
 
                 Screen.DEMO -> {
@@ -921,6 +922,7 @@ private fun PaywallScreen(
     onRestore: () -> Unit,
     onRedeemCode: ((String) -> RedeemOutcome)?,
     onBack: () -> Unit,
+    shelfNote: String? = null,
 ) {
     Column(
         modifier = Modifier
@@ -953,8 +955,12 @@ private fun PaywallScreen(
         )
 
         if (products.isEmpty()) {
-            // 결제 미설정·오프라인. 깨진 화면 대신 사실만 적는다.
-            Section(
+            // **스토어가 없는 것과 스토어에 못 닿은 것은 다른 사건이다.**
+            // 데스크톱에는 처음부터 결제가 없다 (`NoBilling`). 거기에 "스토어에
+            // 닿지 못했다" 고 적으면 화면이 거짓말을 한다 — 닿을 스토어가 없다.
+            // 그 플랫폼은 `shelfNote` 로 사정을 직접 말한다.
+            if (shelfNote != null) Section("Where to buy", shelfNote)
+            else Section(
                 "Not available right now",
                 "The store could not be reached. Your free passages are unaffected.",
             )

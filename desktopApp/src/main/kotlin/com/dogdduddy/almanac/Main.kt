@@ -60,8 +60,12 @@ fun main() = application {
                 onPurchase = loader::purchase,
                 onRestore = loader::restore,
                 onPurchaseAcknowledged = loader::acknowledgePurchase,
-                shelfNote = "On this computer the shelf is the free starter. " +
-                    "The full collection is bought and read on iPhone and Android.",
+                // **코드는 받는다.** 결제가 없다는 것과 열 방법이 없다는 것은 다르다.
+                // 제출물은 심사위원에게 코드로 전부 열라고 안내하는데, 데스크톱에만
+                // 그 길이 없으면 여기서 앱이 반쪽으로 보인다 (promo-code.md).
+                onRedeemCode = loader::redeem,
+                shelfNote = "This computer has no store. The full collection is " +
+                    "bought on iPhone and Android, or opened here with a code.",
                 demo = demoActions(loader),
             ),
         )

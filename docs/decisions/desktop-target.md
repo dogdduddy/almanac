@@ -51,6 +51,26 @@ RevenueCat KMP SDK 는 Android·iOS 아티팩트만 발행한다. `composeApp` �
 ### 뒤집을 조건
 콘테스트 뒤 데스크톱을 실제로 쓰는 유저가 생기면 B. `Billing` 이 인터페이스라 조립 지점만 바꾸면 된다.
 
+### 덧 (2026-09-25) — 코드는 받는다
+
+A 는 그대로다. **결제가 없는 것과 열 방법이 없는 것은 다른 이야기였다.**
+
+제출물은 심사위원에게 프로모션 코드로 전부 열라고 안내하는데(promo-code.md),
+`Main.kt` 가 `onRedeemCode` 를 넘기지 않아 **데스크톱에만 그 길이 없었다.**
+심사위원이 세 번째 플랫폼을 열어보면 거기서만 서가가 86편에 잠겨 있다.
+
+그래서 `onRedeemCode = loader::redeem` 을 넘긴다. 바뀌는 것은 코드 입력란 하나다 —
+상품은 여전히 비어 있고(`NoBilling`), 구매 버튼도 기기 간 동기화도 없다.
+지급은 그 컴퓨터의 `user.db` 안에서 끝난다.
+
+**같이 고친 것.** 상품이 비면 페이월이 `The store could not be reached` 라고 말했는데,
+데스크톱에서는 거짓말이다 — 닿을 스토어가 처음부터 없다. 이제 `shelfNote` 가 있으면
+그 문장을 대신 쓴다 (`Where to buy`). 모바일은 그대로다.
+
+영상 #7 이 이것을 먼저 요구했다. 후보 풀이 보유 팩으로 걸러지므로
+(`candidateIdsForBucket(..., owned)`) 세 화면이 같은 문장에 도착하려면
+엔티틀먼트가 같아야 하는데, 데스크톱만 열 수가 없었다.
+
 ## 4. 데이터 디렉터리와 content.db 갱신
 
 - macOS `~/Library/Application Support/Almanac`, Windows `%APPDATA%\Almanac`, Linux `$XDG_DATA_HOME/almanac`
