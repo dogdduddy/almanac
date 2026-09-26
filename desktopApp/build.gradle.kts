@@ -35,14 +35,25 @@ tasks.test {
 }
 
 /**
- * 촬영용 고정 메뉴 스위치를 앱 JVM 으로 넘긴다.
+ * 촬영용 고정 스위치를 앱 JVM 으로 넘긴다.
  *
- *   ./gradlew :desktopApp:run -Palmanac.demo=true
+ *   ./gradlew :desktopApp:run -Palmanac.demo=true \
+ *       -Palmanac.demo.weather=clear -Palmanac.demo.time=day \
+ *       -Palmanac.demo.seed=shared -Palmanac.demo.archive=refill
  *
  * 환경 변수로 하지 않는 이유: Gradle 은 앱을 **데몬의 환경**으로 띄워서, 셸에서 앞에
  * 붙인 변수가 들어가지 않는다. 기본값이 false 라 그냥 띄우면 진입점이 없다.
+ *
+ * 값까지 넘기는 이유는 **맥 창을 누르려면 손쉬운 사용 권한이 필요하기 때문이다.**
+ * 분할 화면(#7)은 그 권한 없이도 찍을 수 있어야 하고, 덤으로 Demo 화면을 아예
+ * 열지 않게 된다 — 한 프레임도 안 들어가는 것이 요구다 (docs/product/demo-video.md).
  */
 tasks.withType<JavaExec>().configureEach {
+    listOf("almanac.demo", "almanac.demo.weather", "almanac.demo.time",
+           "almanac.demo.seed", "almanac.demo.archive").forEach { key ->
+        providers.gradleProperty(key).orNull?.let { systemProperty(key, it) }
+    }
+    // 안 주면 꺼진 것으로 본다. 스토어로 나가는 빌드에는 이 태스크가 없다.
     systemProperty("almanac.demo", providers.gradleProperty("almanac.demo").getOrElse("false"))
 }
 
