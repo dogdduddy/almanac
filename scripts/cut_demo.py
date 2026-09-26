@@ -83,7 +83,10 @@ TIMELINE = [
     ("04-page-turn",  12.0, 4),
     ("05-montage",    15.0, None),   # 자막은 montage 단계에서 이미 태운다
     ("06-widgets",    15.0, None),   # 화면이 스스로 설명한다
-    ("07-kmp",        14.0, 6),
+    # #7 은 재료가 두 갈래로 온다 — 기기 녹화와 구조 카드. 한 줄로 두면 카드까지
+    # 촬영을 기다려야 하므로 나눈다. 합은 그대로 14초다.
+    ("07a-kmp",        9.0, 6),
+    ("07b-card",       5.0, None),
     ("08-purchase",   16.0, 7),
     ("09-outro",       7.0, 8),
 ]
@@ -101,6 +104,7 @@ SOURCES = {
     "03-matching":  ("raw-ios/03-matching.mp4",  1.78),
     "04-page-turn": ("raw-ios/04-page-turn.mp4", 3.60),
     "09-outro":     ("raw-ios/09-outro.png",     0.00),
+    "07b-card":     ("cards/07-structure.png",   0.00),
 }
 
 #: 아직 한쪽만 찍힌 컷. 완성되면 `SOURCES` 로 옮긴다.
