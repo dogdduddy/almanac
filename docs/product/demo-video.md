@@ -212,6 +212,42 @@ swift scripts/render_card.swift <폰트> <출력.png>           # #7 구조 카�
 Galaxy 와 iPhone 이 나란히 붙어도 티가 안 난다. 크롭 값은 녹화 해상도로 고른다
 (`DEVICE_CROP`) — 파일이 스스로 어느 기기에서 왔는지 말한다.
 
+### 찍고 나서 발견한 것 — 촬영일에 정할 것 둘
+
+**1. 지금까지 찍은 컷은 전부 "안 산 상태" 다.** 푸터에 `The shelf` 가 있다
+(#1–#5, #6 iPhone 절반, #9). 그런데 #7 을 전부 열어둔 기기로 찍으면 그 줄이 사라진다.
+콘티 순서가 #7 → #8 이므로, **서가 진입점이 그걸 없애는 구매보다 먼저 사라진다** —
+앞뒤가 맞지 않는다.
+
+> **#7 도 잠긴 상태로 찍는 편이 낫다.** 영상 전체가 "아직 안 산 사람" 의 화면이고
+> #8 이 그걸 여는 사건이 된다. 대신 세 화면의 보유 팩이 같아야 하므로
+> **Android 는 지우고 다시 설치해야 한다** (코드로 연 것을 UI 로 되돌릴 수 없다).
+> iOS·데스크톱은 `owned_packs` 에서 `core-2026` 줄을 빼면 된다.
+
+**2. #5 에 같은 책이 두 번 나온다.** 일곱 컷의 출처는 이렇다.
+
+| 컷 | 책 |
+|---|---|
+| Rain | **Sons and Lovers, 1913 · D. H. Lawrence** |
+| Snow | Anne of Green Gables, 1908 · L. M. Montgomery |
+| Fog | Great Expectations, 1861 · Charles Dickens |
+| Wind | Far from the Madding Crowd, 1874 · Thomas Hardy |
+| Dawn | The Wind in the Willows, 1908 · Kenneth Grahame |
+| Day | My Antonia, 1918 · Willa Cather |
+| Dusk | **Sons and Lovers, 1913 · D. H. Lawrence** |
+
+문장은 서로 다르지만 15초 안에 같은 제목이 두 번 스친다. 얇은 서가(86편)로 찍어서다.
+`TIME_CUT_WEATHER` 를 `Clear` 말고 다른 빠른 날씨(drizzle 950ms · thunder 950ms)로
+바꿔 시간대 세 컷만 다시 찍으면 갈릴 가능성이 높다.
+
+**#7 을 고를 때도 이 표를 피할 것.** 여기 있는 책이 또 나오면 서가가 얇아 보인다.
+
+### 데스크톱 녹화에는 권한이 하나 필요하다
+
+`screencapture -v` 가 막혀 있다 (정지 캡처는 된다). 시스템 설정 → 개인정보 보호 및
+보안 → **화면 기록** 에서 터미널/Claude Code 를 켜야 창을 녹화할 수 있다.
+안 되면 데스크톱 2초만 직접 녹화해서 넘겨줄 것.
+
 ### 찍으면서 알게 된 것
 
 - **녹화가 도는 동안 화면을 조회하면 안 된다.** 접근성 덤프 한 번이 1~2초라 그만큼
