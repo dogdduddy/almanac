@@ -14,6 +14,7 @@
 
 사용:
     python3 scripts/cut_demo.py cut       <컷 이름> <녹화 뿌리> <컷 디렉터리>
+    python3 scripts/cut_demo.py split     <녹화 뿌리> <컷 디렉터리>    # #7 두 화면
     python3 scripts/cut_demo.py montage   <녹화 디렉터리> <출력.mp4>   # #5 조립
     python3 scripts/cut_demo.py subtitles <출력 디렉터리> [연도차]      # 자막 8장
     python3 scripts/cut_demo.py status    <컷 디렉터리>                # 진행 상황
@@ -297,6 +298,105 @@ def montage(raw_dir: str, out_path: str) -> None:
              "-y", out_path])
 
 
+#: #7 두 화면 분할. (원본 경로, 넘김이 시작되는 시각, 라벨)
+#:
+#: **두 기기의 넘김을 같은 순간에 맞춘다.** 각각 따로 찍었으므로 파일 안의 시각이
+#: 다르다. 여기 적은 값이 컷 안에서 `SPLIT_TURN_AT` 초가 되도록 각자 잘라낸다.
+SPLIT_SOURCES = [
+    ("raw-android/07-kmp-android.mp4", 3.15, "Android"),
+    ("raw-ios/07-kmp-ios.mp4",         7.70, "iPhone"),
+]
+
+#: 컷 안에서 넘김이 일어나는 시각. 앞은 "같은 문장" 을 보여주고, 뒤는 읽을 시간이다.
+SPLIT_TURN_AT = 2.2
+
+#: 폰 하나의 폭과, 잘라낼 높이.
+#:
+#: **세로로 꽉 채우면 본문이 안 읽힌다** — 1080p 에서 폰 비율을 전부 담으면 폭이
+#: 552px 이고 본문 17sp 는 23px 로 뭉갠다 (콘티가 우려한 그대로다). 페이지 아래쪽은
+#: 빈 종이이므로 **잘라내고 키운다.** 두 기기의 논리 폭이 411dp 와 402pt 로 거의
+#: 같아서, 같은 픽셀 폭으로 맞추면 글자 크기도 같아진다.
+SPLIT_PHONE_W = 680
+SPLIT_PHONE_H = 880
+SPLIT_TOP = 40
+SPLIT_GAP = 100
+
+
+def split(raw_root: str, parts_dir: str, name: str = "07a-kmp") -> None:
+    """두 기기의 녹화를 한 프레임에 나란히 놓는다. 넘김은 같은 순간에 일어난다."""
+    lengths = {n: length for n, length, _ in TIMELINE}
+    numbers = {n: number for n, _, number in TIMELINE}
+    length = lengths[name]
+    line = SUBTITLES[numbers[name]].replace("{N}", YEARS) if numbers[name] else None
+
+    os.makedirs(parts_dir, exist_ok=True)
+    dst = f"{parts_dir}/{name}.mp4"
+
+    with tempfile.TemporaryDirectory() as tmp:
+        inputs, chains, tags = [], [], []
+        for i, (rel, turn_at, label) in enumerate(SPLIT_SOURCES):
+            src = os.path.join(raw_root, rel)
+            if not os.path.isfile(src):
+                raise SystemExit(f"녹화가 없다: {src}")
+            crop_top, crop_bottom = crop_for(src)
+            start = max(turn_at - SPLIT_TURN_AT, 0.0)
+            inputs += ["-i", src]
+            # **`fps` 가 `trim` 앞에 온다.** 기기 녹화는 가변 프레임이라 정지 구간에
+            # 프레임이 없는데, 그 상태로 잘라내면 `setpts=PTS-STARTPTS` 가 빈 시간을
+            # 통째로 접어버린다 — 자른 지점이 벽시계가 아니라 "그 이후 첫 프레임" 이
+            # 된다. 한 파일만 다룰 때는 그래도 되지만(`prepare_cut` 이 그렇다),
+            # **두 기기를 같은 순간에 맞추려면 시각이 진짜여야 한다.**
+            chains.append(
+                f"[{i}:v]fps=60,trim=start={start},setpts=PTS-STARTPTS,"
+                f"crop=in_w:in_h-{crop_top + crop_bottom}:0:{crop_top},"
+                f"scale={SPLIT_PHONE_W}:-2,"
+                # 아래쪽 빈 종이를 버린다. 남는 것이 문장이다.
+                f"crop={SPLIT_PHONE_W}:{SPLIT_PHONE_H}:0:0,"
+                f"tpad=stop_mode=clone:stop_duration=12[p{i}]"
+            )
+            tags.append(f"[p{i}]")
+
+        total_w = SPLIT_PHONE_W * len(SPLIT_SOURCES) + SPLIT_GAP * (len(SPLIT_SOURCES) - 1)
+        x0 = (OUT_W - total_w) // 2
+        chains.append(f"color=c={PAPER}:s={OUT_W}x{OUT_H}:r=60[bg]")
+
+        last = "[bg]"
+        for i, tag in enumerate(tags):
+            x = x0 + i * (SPLIT_PHONE_W + SPLIT_GAP)
+            out = f"[s{i}]"
+            chains.append(f"{last}{tag}overlay=x={x}:y={SPLIT_TOP}{out}")
+            last = out
+
+        # 라벨과 자막. 라벨은 폰 아래, 자막은 그 아래다.
+        extra = len(SPLIT_SOURCES)
+        for i, (_, _, label) in enumerate(SPLIT_SOURCES):
+            png = render_text(label, 30, "#8A8378", tmp)
+            inputs += ["-i", png]
+            x = x0 + i * (SPLIT_PHONE_W + SPLIT_GAP)
+            out = f"[l{i}]"
+            chains.append(
+                f"{last}[{extra + i}:v]"
+                f"overlay=x={x}+({SPLIT_PHONE_W}-w)/2:y={SPLIT_TOP + SPLIT_PHONE_H + 14}{out}"
+            )
+            last = out
+
+        if line:
+            png = render_text(line, 46, "#1A1A1A", tmp)
+            inputs += ["-i", png]
+            n = extra + len(SPLIT_SOURCES)
+            chains.append(f"{last}[{n}:v]overlay=x=(W-w)/2:y=H-H*0.075[final]")
+            last = "[final]"
+
+        chain = ";".join(chains) + f";{last}format=yuv420p[out]"
+        run(["ffmpeg", "-v", "error", *inputs, "-filter_complex", chain,
+             "-map", "[out]", "-an", "-t", f"{length}",
+             "-c:v", "libx264", "-preset", "medium", "-crf", "16", "-y", dst])
+
+    made = duration(dst)
+    mark = "\u2713" if abs(made - length) < 0.15 else "!"
+    print(f"  {mark} {name}  {length:.1f}\ucd08 (\uc2e4\uc81c {made:.2f})  \u2190 \ubd84\ud560 {len(SPLIT_SOURCES)}\ud654\uba74")
+
+
 def cut(name: str, raw_root: str, parts_dir: str) -> None:
     """컷 하나를 원본에서 잘라낸다. 길이는 콘티가 정하고, 시작은 `SOURCES` 가 정한다."""
     lengths = {n: length for n, length, _ in TIMELINE}
@@ -412,7 +512,9 @@ def main(argv: list[str]) -> int:
         print(__doc__.strip(), file=sys.stderr)
         return 2
     cmd = argv[1]
-    if cmd == "cut" and len(argv) >= 5:
+    if cmd == "split" and len(argv) >= 4:
+        split(argv[2], argv[3])
+    elif cmd == "cut" and len(argv) >= 5:
         cut(argv[2], argv[3], argv[4])
     elif cmd == "montage" and len(argv) >= 4:
         montage(argv[2], argv[3])
