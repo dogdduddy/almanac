@@ -292,7 +292,11 @@ class AlmanacService(
         val locationKey = LocationKey.format(
             place.coordinates.latitude, place.coordinates.longitude
         )
-        val installId = content.installId { newInstallId() }
+        // **촬영용 시드를 따른다.** 이 기능이 있는 이유가 분할 화면(#7)에서
+        // 두 기기의 아카이브를 같은 모양으로 만드는 것인데, 여기서 기기 고유
+        // installId 를 쓰면 오늘 페이지만 맞고 넘긴 페이지는 갈린다 —
+        // 하필 "같은 제스처, 같은 문장" 을 증명하려는 컷에서 반대가 찍힌다.
+        val installId = demo.installIdOr(content.installId { newInstallId() })
         val now = clock.nowEpochSeconds()
 
         var made = 0

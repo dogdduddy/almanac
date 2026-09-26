@@ -188,6 +188,39 @@ class DemoOverrideTest {
             "반복이 너무 많다: ${texts.distinct().size}/${texts.size}")
     }
 
+    /**
+     * **아카이브 채우기도 촬영용 시드를 따라야 한다.**
+     *
+     * 이 기능이 있는 이유가 분할 화면(#7)에서 두 기기의 아카이브를 같은 모양으로
+     * 만드는 것이다. 기기 고유 installId 로 채우면 오늘 페이지만 맞고 넘긴 페이지는
+     * 갈리는데, 하필 "같은 제스처, 같은 문장" 을 증명하려는 컷이라 정반대가 찍힌다.
+     * 실제로 그렇게 찍혔다 — 한쪽은 Dracula, 다른 쪽은 Riders of the Purple Sage.
+     */
+    @Test
+    fun `시드를 맞추면 두 설치가 같은 아카이브를 만든다`() = runTest {
+        val a = device(INSTALL_A)
+        val b = device(INSTALL_B)
+        listOf(a, b).forEach { it.demo.installId = DemoControls.SHARED_SEED_INSTALL_ID }
+
+        a.service.seedArchive(days = 21)
+        b.service.seedArchive(days = 21)
+
+        assertTrue(a.archiveEntries().isNotEmpty(), "한 장도 안 채워졌다")
+        assertEquals(a.archiveEntries(), b.archiveEntries())
+    }
+
+    /** 위 검증이 공짜로 통과하지 않는지 본다 — 시드를 안 맞추면 갈려야 한다. */
+    @Test
+    fun `시드를 맞추지 않으면 아카이브가 갈린다`() = runTest {
+        val a = device(INSTALL_A)
+        val b = device(INSTALL_B)
+
+        a.service.seedArchive(days = 21)
+        b.service.seedArchive(days = 21)
+
+        assertNotEquals(a.archiveEntries(), b.archiveEntries())
+    }
+
     /** 채운 뒤에도 오늘 페이지는 오늘 것이어야 한다 — 아카이브가 오늘을 덮으면 안 된다. */
     @Test
     fun `채워도 오늘 페이지는 그대로다`() = runTest {
@@ -217,6 +250,11 @@ class DemoOverrideTest {
         fun archiveDates(): List<String> = repository.archivedPages(200)
             .map { it.dateKey }
             .filterNot { it == DATE_KEY }
+
+        /** 아카이브의 (날짜, 시간대, 문장). 두 기기가 같은 것을 만들었는지 볼 때 쓴다. */
+        fun archiveEntries(): List<String> = repository.archivedPages(200)
+            .filterNot { it.dateKey == DATE_KEY }
+            .map { "%s|%s|%s".format(it.dateKey, it.timeOfDay.key, it.entry.text) }
     }
 
     /** 기기 하나 = user.db 하나. content.db 는 번들이므로 공유한다. */
