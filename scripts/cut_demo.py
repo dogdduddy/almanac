@@ -46,10 +46,21 @@ MUTED = "0x8A8378"
 #: **Android 와 iOS 를 섞어 쓰기 때문이다** — 시스템 영역을 걷어내면 남는 것은
 #: 앱 화면뿐이라 두 기기의 컷이 한 영상 안에서 따로 놀지 않는다.
 DEVICE_CROP = {
-    (1080, 2340): (98, 130),    # Galaxy S23 — cutout / 내비게이션 바
+    # 내비게이션 바는 2205 행부터다. 130 으로 두니 회색 막대 다섯 줄이 남아 #5 아래에 선이 그어졌다.
+    (1080, 2340): (98, 135),    # Galaxy S23 — cutout / 내비게이션 바
     (1080, 2400): (132, 63),    # Pixel 8 에뮬레이터 — 상태바 / 제스처 바 (dumpsys window 실측)
     (1206, 2622): (186, 102),   # iPhone 17 Pro — 상태바 62pt / 홈 인디케이터 34pt
     (880, 1720): (0, 0),        # 데스크톱 창 — 제목 표시줄은 남긴다. 창이라는 것이 보여야 한다
+}
+
+#: 앱 영역 안에 떠 있는 시스템 장식. (x, y, w, h — 녹화 픽셀) **바로 왼쪽의 빈 종이를
+#: 떼어다 덮는다.** 색을 박아 칠하면 녹화의 종이색과 한 단계만 달라도 네모가 보이는데,
+#: 옆 종이를 그대로 옮기면 프레임마다 정확히 같다. 본문은 화면 폭의 89% 안이라(Galaxy 는
+#: 958px 에서 끝난다) 오른쪽 가장자리 100px 은 늘 빈 종이다.
+DEVICE_PATCHES = {
+    # Galaxy S23 — 엣지 패널 손잡이. 9/25 몽타주 일곱 컷 전부 같은 자리에 찍혀 있었다.
+    # 기기 설정에서 끌 수 있지만, 이미 찍은 원본(애니메이션이 120Hz 로 담긴 유일한 것)을 살린다.
+    (1080, 2340): [(1060, 1664, 20, 472)],
 }
 
 #: 기기의 논리 폭 (dp · pt). **분할 화면에서 글자 크기를 맞추는 기준이다.**
@@ -64,12 +75,19 @@ DEVICE_POINTS = {
     (880, 1720): 440,             # 데스크톱 창 — Retina @2x
 }
 
-#: 페이지가 나타나는 시각.
+#: 촬영 메뉴의 `Close` 가 있는 자리 (시스템 영역을 뺀 앱 화면에 대한 비율: 왼쪽, 위, 폭, 높이).
+#: 페이지에서는 이 자리가 비어 있다 — 제목(`N years ago`)은 화면 폭의 63% 에서 끝난다.
 #:
-#: **파일 안의 시각은 벽시계와 다르다.** `screenrecord` 는 화면이 바뀔 때만 프레임을
-#: 쓰므로, 녹화 앞의 정지 구간(촬영 메뉴를 띄워둔 0.8초)은 파일에서 거의 사라진다.
-#: 그래서 실측으로 잡는다 — 이 값 이후로는 촬영 메뉴가 한 프레임도 없다.
-PAGE_AT = 0.25
+#: **페이지가 나타나는 시각은 재지 않고 찾는다** (`page_at`). 예전에는 0.25초로 박았는데
+#: 우연히 맞았던 것이다. `trim` 은 그 앞의 프레임을 버리고 뒤의 첫 프레임부터 쓰는데,
+#: Galaxy 녹화에는 0초(메뉴)와 0.64초(페이지) 사이에 프레임이 없었다. 9/28 에뮬레이터
+#: 녹화에는 0.27초에 메뉴를 다시 그린 한 장이 끼어 있어서 같은 값으로 자르니 메뉴가 찍혔다.
+#: 메뉴는 닫히는 순간 한 번에 사라지고(빈 종이 한 장) 페이지가 번져 나오므로, 이 자리가
+#: 처음으로 깨끗한 종이인 프레임이 곧 페이지의 시작이다.
+MENU_CLOSE_AREA = (0.75, 0.0, 0.25, 0.08)
+
+#: 빈 종이로 볼 밝기. 종이는 249 다. 메뉴가 10% 만 남아 있어도 237 로 떨어진다.
+CLEAN_LUMA = 240
 
 OUT_W, OUT_H = 1920, 1080
 
@@ -310,8 +328,12 @@ def prepare_cut(src: str, dst: str, *, start: float, length: float,
         # 보여주던 2.6초가 사라지고 앱이 바로 열렸다. 먼저 60fps 로 채운다.
         crop = f"fps=60,{crop}"
 
+    patch = "".join(
+        f"split[pa{i}][pb{i}];[pb{i}]crop={w}:{h}:{x - w}:{y}[pc{i}];"
+        f"[pa{i}][pc{i}]overlay={x}:{y},"
+        for i, (x, y, w, h) in enumerate(DEVICE_PATCHES.get(frame_size(src), [])))
     base = (
-        f"{mask}{head}"
+        f"{mask}{head}{patch}"
         f"{crop}"
         f"{pan}"
         f"scale=-2:{OUT_H},"
@@ -366,6 +388,29 @@ def find_words(src: str, words: list[str], at: float, crop_top: int
     return boxes
 
 
+def page_at(src: str) -> float:
+    """촬영 메뉴가 사라진 첫 프레임의 시각 (`MENU_CLOSE_AREA`)."""
+    top, bottom = crop_for(src)
+    w, h = frame_size(src)
+    h -= top + bottom
+    ax, ay, aw, ah = MENU_CLOSE_AREA
+    cx, cy, cw, ch = int(w * ax), int(h * ay), int(w * aw), int(h * ah)
+    # 가변 프레임 그대로 푼다. 시각 목록과 한 장씩 짝지어야 한다.
+    raw = subprocess.run(
+        ["ffmpeg", "-v", "error", "-t", "3", "-i", src, "-fps_mode", "passthrough",
+         "-vf", f"format=gray,crop={cw}:{ch}:{cx}:{top + cy}", "-f", "rawvideo", "-"],
+        capture_output=True).stdout
+    times = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0", "-read_intervals", "%+3",
+         "-show_entries", "frame=pts_time", "-of", "csv=p=0", src],
+        capture_output=True, text=True).stdout.split()
+    size = cw * ch
+    for i, t in enumerate(times[:len(raw) // size]):
+        if min(raw[i * size:(i + 1) * size]) >= CLEAN_LUMA:
+            return float(t)
+    raise SystemExit(f"{src} 의 앞 3초에서 촬영 메뉴가 닫히지 않았다.")
+
+
 def montage(raw_dir: str, out_path: str) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         parts = []
@@ -374,10 +419,11 @@ def montage(raw_dir: str, out_path: str) -> None:
             if not os.path.isfile(src):
                 raise SystemExit(f"녹화가 없다: {src}")
             dst = f"{tmp}/{name}.mp4"
-            prepare_cut(src, dst, start=PAGE_AT, length=length,
+            start = page_at(src)
+            prepare_cut(src, dst, start=start, length=length,
                         label=label, cache_dir=tmp)
             parts.append(dst)
-            print(f"  {name:10s} {length:>4.1f}초  ({label})")
+            print(f"  {name:10s} {length:>4.1f}초  ({label})  ← {start:.2f}초부터")
 
         listing = f"{tmp}/parts.txt"
         with open(listing, "w") as f:

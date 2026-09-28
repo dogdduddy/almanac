@@ -41,6 +41,25 @@ ENTRANCE_MS = {
 #: 시간대 컷에서 고정할 날씨. **빠른 것이어야 한다** — 1.8초 칸에 눈(2300ms)을 두면 잘린다.
 TIME_CUT_WEATHER = "Clear"
 
+#: 날씨 컷 넷. (파일 이름, 날씨, 고정할 시간대)
+#:
+#: **시간대를 실제 시각에 맡기면 찍는 시각마다 책이 달라진다.** 그래서 컷마다 박는다.
+#: 시간대는 화면에 드러나지 않으므로(구석 라벨은 날씨뿐) 컷마다 달라도 보는 사람은 모른다.
+#: 고르는 기준은 **책이 겹치지 않는 것**이다 — 일곱 컷끼리도, 다른 컷과도.
+#:
+#: 2026-09-28 Pixel 8 에뮬레이터(잠긴 서가)에서 세 가지로 찍어 봤다.
+#: - 전부 저녁 — 눈이 Ethan Frome. #6 의 iPhone 위젯도 Ethan Frome 이라 10초 사이에 두 번
+#: - 전부 낮   — 비와 눈이 둘 다 Lorna Doone
+#: - 전부 아침 — 바람이 Ethan Frome
+#: 눈만 아침으로 두면 Dubliners("The Dead" 의 끝, 눈이 온 세상에 내리는 문장)가 나오고
+#: 일곱 권이 전부 다르다. 날짜가 바뀌면 다시 골라야 한다.
+WEATHER_CUTS = [
+    ("rain", "Rain", "Evening & night"),
+    ("snow", "Snow", "Morning"),
+    ("fog", "Fog", "Evening & night"),
+    ("wind", "Wind", "Evening & night"),
+]
+
 
 def open_demo(d: Device) -> None:
     """어느 화면에서든 촬영 메뉴까지 간다."""
@@ -80,11 +99,10 @@ def montage(d: Device, out_dir: str) -> None:
     """#5 하늘의 변주 — 날씨 4종 + 시간대 3종."""
     os.makedirs(out_dir, exist_ok=True)
 
-    for name, label in [("rain", "Rain"), ("snow", "Snow"),
-                        ("fog", "Fog"), ("wind", "Wind")]:
+    for name, label, time_of_day in WEATHER_CUTS:
         # 애니메이션이 끝나고도 2초 남게 받는다. 편집에서 자를 여유다.
         hold = ENTRANCE_MS[label] / 1000 + 2.0
-        capture(d, f"{out_dir}/05-{name}.mp4", choose=[label], hold=hold)
+        capture(d, f"{out_dir}/05-{name}.mp4", choose=[time_of_day, label], hold=hold)
         print(f"  ✓ 05-{name}  (등장 {ENTRANCE_MS[label]}ms)")
 
     hold = ENTRANCE_MS[TIME_CUT_WEATHER] / 1000 + 2.0
