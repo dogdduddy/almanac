@@ -25,8 +25,8 @@ android {
         applicationId = "com.dogdduddy.almanac"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.3.1"
+        versionCode = 5
+        versionName = "0.4.0"
     }
 
     buildFeatures {

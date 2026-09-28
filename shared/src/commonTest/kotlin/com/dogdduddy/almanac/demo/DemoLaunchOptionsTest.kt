@@ -21,7 +21,7 @@ class DemoLaunchOptionsTest {
     }
 
     @Test
-    fun `#7 을 찍는 옵션을 그대로 읽는다`() {
+    fun `분할 화면 컷을 찍는 옵션을 그대로 읽는다`() {
         val options = parse(
             DemoLaunchOptions.WEATHER to "clear",
             DemoLaunchOptions.TIME to "day",
