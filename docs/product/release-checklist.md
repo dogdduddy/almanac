@@ -35,8 +35,8 @@
 
 ## 내부 테스트
 
-- [ ] Play 내부 테스트 트랙에 Release AAB 업로드 — `0.4.0 (5)` AAB 는 2026-09-28 에 만들었다
-  (`androidApp/build/outputs/bundle/release/almanac-0.4.0-5.aab`). 콘솔 업로드는 손으로 한다
+- [ ] Play 내부 테스트 트랙에 Release AAB 업로드 — `0.4.0 (6)` AAB 는 2026-09-28 에 만들었다
+  (`androidApp/build/outputs/bundle/release/almanac-0.4.0-6.aab`). (5) 는 상품 제목에 앱 이름이 붙어 나와 대체했다. 콘솔 업로드는 손으로 한다
   (Play 게시 API 자격 증명이 없다)
 - [ ] 라이선스 테스터 계정으로 새 설치 → 구매 → 재실행 → 복원 확인
 - [x] TestFlight 내부 테스트에 Release 아카이브 업로드 — `0.4.0 (6)`, 2026-09-28.

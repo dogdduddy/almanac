@@ -15,6 +15,24 @@ data class BillingProduct(
     val displayPrice: String?,
 )
 
+/**
+ * 스토어가 준 상품 제목에서 **Google Play 가 붙인 앱 이름**을 뗀다.
+ *
+ * Play 의 상품 제목은 `The 2026 Collection (Almanac - Weathered Words)` 처럼 끝에 앱 이름이
+ * 괄호로 붙어 온다. 서가 화면은 이미 앱 안이라 그 괄호는 중복일 뿐이고, 줄이 넘쳐 두 줄이 된다.
+ * RevenueCat KMP 는 괄호 없는 이름(`ProductDetails.name`)을 따로 주지 않는다.
+ *
+ * 우리 상품 이름은 괄호로 끝나지 않으므로 **끝의 괄호 하나**는 스토어가 붙인 것으로 본다.
+ * App Store 제목에는 붙지 않아 그대로 지나간다. 떼고 나서 비면 원래 제목을 쓴다.
+ */
+fun storeTitle(raw: String): String {
+    val trimmed = raw.trim()
+    if (!trimmed.endsWith(")")) return trimmed
+    val open = trimmed.lastIndexOf(" (")
+    if (open <= 0) return trimmed
+    return trimmed.substring(0, open).trimEnd().ifBlank { trimmed }
+}
+
 sealed interface PurchaseOutcome {
     data class Purchased(val packIds: Set<String>) : PurchaseOutcome
     data object Cancelled : PurchaseOutcome

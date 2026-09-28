@@ -50,7 +50,7 @@ class RevenueCatBilling(
             BillingProduct(
                 packId = entry.packId,
                 productId = product.id,
-                title = product.title.ifBlank { entry.fallbackTitle },
+                title = storeTitle(product.title).ifBlank { entry.fallbackTitle },
                 description = product.localizedDescription?.takeIf { it.isNotBlank() }
                     ?: entry.fallbackDescription,
                 displayPrice = product.price.formatted,
