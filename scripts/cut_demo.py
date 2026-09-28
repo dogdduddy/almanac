@@ -160,6 +160,23 @@ END_CARDS = {
 #: 9/25 의 iPhone 녹화는 버렸다. 재부팅 직후라 위젯이 검은 바탕에 검은 글자로 그려져
 #: 읽히지 않았다. 지금 원본은 2026-09-28 에 다시 찍은 것이다.
 SEQUENCES = {
+    # #8 구매. Galaxy 에 내부 테스트 트랙으로 설치한 스토어 빌드 0.4.0 (6), 라이선스 테스터 계정의
+    # 테스트 결제다 (2026-09-28). 녹화 하나로 담지 못해 네 조각이다.
+    # - 서가는 녹화 첫 프레임을 정지화면으로 쓴다. 가변 프레임 녹화라 탭 전 3.5초에 프레임이 한 장뿐이고,
+    #   거기서 잘라 들어가면 그 한 장을 버려 서가가 사라진다
+    # - 결제 시트 → `처리 중` 까지만 쓴다. 9.77초부터 Play 가 **"구매 시 인증을 요구하시겠습니까?"**
+    #   를 처음 물었다 (계정 설정이라 사람이 답했다). 결제 완료 문구가 그 질문과 한 장에 붙어 나와 뺐다
+    # - 확인 화면은 멈춰 있어 녹화에 남지 않으므로 스크린샷, 마지막은 `Start reading` 을 눌러 돌아오는 녹화
+    # 증명은 "스토어 결제 시트 → 앱의 서가 상태가 바뀜" 의 연결이다 (콘티 #8 비고).
+    #
+    # **자막은 뒤 두 조각에만 얹는다.** 자막 자리가 폰 화면 아래쪽인데, 결제 시트는 어두운 바탕이라
+    # 검은 자막이 안 보이고 시트의 글자와 겹쳤다. 문장의 뜻도 "열렸다" 는 확인 화면에 맞는다 (7.3초).
+    "08-purchase": [
+        ("raw-android/08-shelf.png",          0.0, 2.4, None, False),
+        ("raw-android/08-purchase.mp4",       3.4, 6.3, None, False),
+        ("raw-android/08-confirm.png",        0.0, 4.3, None),
+        ("raw-android/08-start-reading.mp4",  0.0, 3.0, None),
+    ],
     "06-widgets": [
         ("raw-ios/06-widget-ios.png",         0.0, 5.5, (1.00, 1.08, 0.5, 0.12)),
         ("raw-android/06-widget-android.mp4", 0.0, 9.5, (1.00, 1.04, 0.5, 0.15)),
@@ -672,7 +689,9 @@ def sequence(name: str, raw_root: str, parts_dir: str) -> None:
     numbers = {n: number for n, _, number in TIMELINE}
     line = SUBTITLES[numbers[name]].replace("{N}", YEARS) if numbers[name] else None
     pieces = SEQUENCES[name]
-    total = sum(length for _, _, length, _ in pieces)
+    # 조각은 (원본, 시작, 길이, 카메라) 에 자막을 얹을지가 붙을 수 있다. 없으면 얹는다.
+    pieces = [(*p, True) if len(p) == 4 else p for p in pieces]
+    total = sum(length for _, _, length, _, _ in pieces)
     if abs(total - lengths[name]) > 0.01:
         raise SystemExit(f"{name} 조각의 합이 {total:.2f}초다. 콘티는 {lengths[name]:.1f}초.")
 
@@ -681,19 +700,19 @@ def sequence(name: str, raw_root: str, parts_dir: str) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         listing = f"{tmp}/parts.txt"
         with open(listing, "w") as f:
-            for i, (rel, start, length, move) in enumerate(pieces):
+            for i, (rel, start, length, move, subtitled) in enumerate(pieces):
                 src = os.path.join(raw_root, rel)
                 if not os.path.isfile(src):
                     raise SystemExit(f"녹화가 없다: {src}")
                 part = f"{tmp}/part{i}.mp4"
                 prepare_cut(src, part, start=start, length=length, label=None,
-                            cache_dir=tmp, subtitle=line, move=move)
+                            cache_dir=tmp, subtitle=line if subtitled else None, move=move)
                 f.write(f"file '{part}'\n")
         run(["ffmpeg", "-v", "error", "-f", "concat", "-safe", "0",
              "-i", listing, "-c", "copy", "-y", dst])
     made = duration(dst)
     mark = "✓" if abs(made - lengths[name]) < 0.15 else "!"
-    shape = " → ".join(os.path.basename(rel) for rel, _, _, _ in pieces)
+    shape = " → ".join(os.path.basename(p[0]) for p in pieces)
     print(f"  {mark} {name}  {lengths[name]:.1f}초 (실제 {made:.2f})  ← {shape}")
 
 
