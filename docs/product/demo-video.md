@@ -308,10 +308,12 @@ Riders of the Purple Sage 다 (같은 에뮬레이터로 같은 날 찍어서). 
   같은 그림이다. 그래서 #2 는 물러나고 #3 은 들어간다 (`MOVES`). 다만 **배율 상한은
   본문 폭이 정한다** — 1.3 배로 걸었더니 `The Enchanted April` 이 `e Enchanted April`
   이 됐다. 본문이 화면 폭의 89% 를 쓰므로 1.12 가 한계다
-- **위치를 바꿔도 위젯은 따라오지 않는다.** iOS 앱이 `WidgetCenter.reloadAllTimelines()`
-  를 부르지 않아서, 도시를 바꾸면 위젯이 최대 한 시간 동안 이전 도시의 문장을 들고 있다.
-  이력을 비우고 채워도 마찬가지다 — 9/28 에 #7 을 찍은 뒤 iPhone 위젯은 Ethan Frome,
-  앱은 Riders of the Purple Sage 였다. 앱 쪽 고침은 따로 잡아야 한다
+- **위치를 바꿔도 위젯은 따라오지 않았다.** iOS 앱이 `WidgetCenter.reloadAllTimelines()`
+  를 부르지 않아서, 도시를 바꾸면 위젯이 최대 한 시간 동안 이전 도시의 문장을 들고 있었다.
+  이력을 비우고 채워도 마찬가지였다 — 9/28 에 #7 을 찍은 뒤 iPhone 위젯은 Ethan Frome,
+  앱은 Riders of the Purple Sage 였다. **9/28 에 고쳤다** — Android 가 Glance 를 갱신하는
+  자리에서 iOS 도 위젯을 다시 그린다. 시뮬레이터에서 Tokyo 로 바꾸고 바로 홈으로 나가
+  위젯이 같은 문장(The Great Gatsby)인 것을 확인했다. **9/28 이전에 찍은 원본은 고치기 전 빌드다**
 - **재부팅 직후의 iOS 위젯은 검게 그려질 수 있다.** 9/25 에 재부팅하고 찍은 #6 은 위젯이
   검은 바탕에 검은 글자라 읽히지 않았다 (지금은 정상이다). 그래서 #6 에서 **누르는 쪽을
   Android 로 옮겼다** — 에뮬레이터는 adb 로 실제 위젯을 누를 수 있다

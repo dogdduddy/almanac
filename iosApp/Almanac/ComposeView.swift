@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import WidgetKit
 import ComposeApp
 
 /// Compose Multiplatform 화면을 SwiftUI 에 끼워 넣는다.
@@ -8,7 +9,12 @@ import ComposeApp
 /// Swift 에서 부를 수 있게 KMP 가 만들어주는 이름이다.
 struct ComposeView: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIViewController {
-        MainViewControllerKt.MainViewController(demoTools: Self.demoTools)
+        MainViewControllerKt.MainViewController(
+            demoTools: Self.demoTools,
+            // `WidgetCenter` 는 Swift 전용이라 Kotlin 이 직접 못 부른다. 부를 때를 정하는 것은
+            // Kotlin 이다 (Android 가 Glance 를 갱신하는 자리와 같다).
+            reloadWidgets: { WidgetCenter.shared.reloadAllTimelines() }
+        )
     }
 
     /// 촬영용 조건 고정 메뉴를 띄울지.

@@ -31,8 +31,16 @@ import platform.Foundation.NSNotificationCenter
  * @param demoTools 촬영용 조건 고정 메뉴를 띄울지. **Swift 의 `#if DEBUG` 가 넘긴다** —
  *   Kotlin 쪽에서 판단하지 않는 이유는, 여기서 볼 수 있는 것이 Kotlin 프레임워크의
  *   빌드 구성이지 앱 타깃의 구성이 아니기 때문이다. 릴리스 앱에는 false 로 들어온다.
+ * @param reloadWidgets 홈 화면 위젯을 다시 그리게 한다. **Swift 가 넘긴다** — `WidgetCenter`
+ *   는 Swift 전용 API 라 Kotlin 에서 부를 수 없다. Android 가 Glance 위젯을 갱신하는 것과
+ *   같은 자리(로딩이 아닌 상태를 낼 때)에서 부른다. 없으면 도시를 바꿔도 위젯이 최대 한 시간
+ *   동안 이전 도시의 문장을 들고 있다 — 9/28 에 앱은 Riders of the Purple Sage, 위젯은
+ *   Ethan Frome 이었다. 앱이 앞에 있을 때의 갱신은 WidgetKit 의 예산을 쓰지 않는다.
  */
-fun MainViewController(demoTools: Boolean = false): UIViewController = ComposeUIViewController {
+fun MainViewController(
+    demoTools: Boolean = false,
+    reloadWidgets: () -> Unit = {},
+): UIViewController = ComposeUIViewController {
     var state by remember { mutableStateOf<AppState>(AppState.Loading) }
 
     // 메인 디스패처여야 한다. CLLocationManager 를 만드는 스레드가 여기로 정해지고,
@@ -47,7 +55,11 @@ fun MainViewController(demoTools: Boolean = false): UIViewController = ComposeUI
             service = { IosAlmanacGraph.service },
             entitlements = { IosAlmanacGraph.entitlements },
             billing = { IosAlmanacGraph.billing },
-            onState = { state = it },
+            onState = {
+                // 화면 상태를 먼저 바꾼다. 위젯 갱신은 앱 첫 화면을 기다리게 하지 않는다.
+                state = it
+                if (it !is AppState.Loading) reloadWidgets()
+            },
         )
     }
 
