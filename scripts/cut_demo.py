@@ -108,6 +108,16 @@ SOURCES = {
     "07b-card":     ("cards/07-structure.png",   0.00),
 }
 
+#: 컷 끝에 붙는 카드. (카드 경로, 카드가 들어오기 시작하는 시각, 디졸브 길이)
+#:
+#: #9 는 마지막 발췌문 → 앱 이름 → 스토어 배지 순서다 (콘티). 페이지와 카드는 녹화 하나로
+#: 담을 수 없으므로 편집이 잇는다. 다른 컷은 전부 하드 컷이지만 여기만 디졸브다 —
+#: 영상이 끝난다는 신호가 여기서 나와야 한다. 자막은 앞쪽(페이지)에만 있고 2.5초를 넘긴다.
+#: 카드는 `scripts/render_endcard.swift` 가 굽는다.
+END_CARDS = {
+    "09-outro": ("cards/09-end.png", 3.4, 0.6),
+}
+
 #: 아직 한쪽만 찍힌 컷. 완성되면 `SOURCES` 로 옮긴다.
 #:
 #: `06-widgets` 는 Android 홈 화면과 iPhone 홈 화면을 둘 다 보여줘야 하는데
@@ -415,10 +425,29 @@ def cut(name: str, raw_root: str, parts_dir: str) -> None:
 
     os.makedirs(parts_dir, exist_ok=True)
     dst = f"{parts_dir}/{name}.mp4"
+    card = END_CARDS.get(name)
     with tempfile.TemporaryDirectory() as tmp:
-        prepare_cut(src, dst, start=start, length=lengths[name],
-                    label=None, cache_dir=tmp, subtitle=line,
-                    move=MOVES.get(name))
+        if card is None:
+            prepare_cut(src, dst, start=start, length=lengths[name],
+                        label=None, cache_dir=tmp, subtitle=line,
+                        move=MOVES.get(name))
+        else:
+            card_rel, card_at, fade = card
+            card_src = os.path.join(raw_root, card_rel)
+            if not os.path.isfile(card_src):
+                raise SystemExit(f"카드가 없다: {card_src}")
+            # 앞쪽은 디졸브가 겹칠 만큼 더 길게 뽑는다. 두 조각의 합이 컷 길이가 된다.
+            head = f"{tmp}/head.mp4"
+            tail = f"{tmp}/tail.mp4"
+            prepare_cut(src, head, start=start, length=card_at + fade,
+                        label=None, cache_dir=tmp, subtitle=line,
+                        move=MOVES.get(name))
+            prepare_cut(card_src, tail, start=0.0, length=lengths[name] - card_at,
+                        label=None, cache_dir=tmp)
+            run(["ffmpeg", "-v", "error", "-i", head, "-i", tail, "-filter_complex",
+                 f"[0:v][1:v]xfade=transition=fade:duration={fade}:offset={card_at},"
+                 f"format=yuv420p",
+                 "-an", "-c:v", "libx264", "-preset", "medium", "-crf", "16", "-y", dst])
     made = duration(dst)
     mark = "✓" if abs(made - lengths[name]) < 0.15 else "!"
     print(f"  {mark} {name}  {lengths[name]:.1f}초 (실제 {made:.2f})  ← {rel} @ {start}초")
