@@ -40,7 +40,8 @@
   (`androidApp/build/outputs/bundle/release/almanac-0.4.0-6.aab`). (5) 는 상품 제목에 앱 이름이 붙어 나와 대체했다. 콘솔 업로드는 손으로 한다
   (Play 게시 API 자격 증명이 없다)
 - [ ] 라이선스 테스터 계정으로 새 설치 → 구매 → 재실행 → 복원 확인
-- [x] TestFlight 내부 테스트에 Release 아카이브 업로드 — `0.4.0 (6)`, 2026-09-28.
+- [x] TestFlight 내부 테스트에 Release 아카이브 업로드 — `0.4.0 (7)`, 2026-09-28. **심사에는 7 을 쓴다.**
+  (6) 에는 앱 안 코드 입력란이 있어 가이드라인 3.1.1 에 걸릴 수 있었다. iOS 에서만 뺐다
   `xcodebuild -exportArchive` 로 Xcode 계정을 써서 올렸다 (`iosApp/build/AppStoreExportOptions.plist`)
 - [ ] TestFlight 의 **수출 규정 준수(암호화)** 질문에 답한다. Info.plist 에
   `ITSAppUsesNonExemptEncryption` 이 없어서 빌드마다 묻는다 — 답이 정해지면 키로 넣을지 결정

@@ -111,7 +111,11 @@ fun MainViewController(
             onPurchase = loader::purchase,
             onRestore = loader::restore,
             onPurchaseAcknowledged = loader::acknowledgePurchase,
-            onRedeemCode = loader::redeem,
+            // **iOS 에는 앱 안 코드 입력란을 두지 않는다.** 결제 없이 유료 서가를 여는 자체 코드는
+            // App Store 가이드라인 3.1.1 이 막는 것이다 (예시로 "프로모션 코드" 를 적어 둔다).
+            // iOS 심사위원은 App Store 의 Offer Code 로 연다 — RevenueCat 을 타는 정식 경로다
+            // (docs/decisions/promo-code.md). Android·데스크톱에는 그대로 있다.
+            onRedeemCode = null,
             demo = if (!demoTools) null else DemoActions(
                 controls = IosAlmanacGraph.demo,
                 onApply = loader::refresh,
