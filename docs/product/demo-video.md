@@ -86,9 +86,8 @@
 원래 콘티의 "Mac 데스크톱 위젯" 은 **위젯이 아니라 앱 창**으로 찍는다.
 
 **데스크톱에는 결제가 없다** (`NoBilling` — 의도된 결정, docs/decisions/desktop-target.md).
-상품이 비어 서가 진입점이 감춰지고, About 에 한 줄로만 안내한다.
-그래서 **구매 컷(#8)은 데스크톱으로 찍을 수 없고**, 분할 화면에서도 데스크톱 쪽
-푸터에는 `The shelf` 가 없다 — 클로즈업하지 말 것.
+그래서 **구매 컷(#8)은 데스크톱으로 찍을 수 없다.** 다만 코드 입력란은 있어서(promo-code.md)
+잠긴 서가면 데스크톱 푸터에도 `The shelf` 가 보인다 — 폰과 같은 줄이다.
 
 표면은 다섯이다: Android 앱(Compose) / Android 위젯(Glance) /
 iOS 앱(Compose) / iOS 위젯(WidgetKit) / 데스크톱(Compose).
@@ -194,6 +193,11 @@ python3 scripts/cut_demo.py status <컷 디렉터리>            # 어디까지 
 python3 scripts/cut_demo.py preview <컷 디렉터리> <출력>    # 찍은 것만 이어보기
 python3 scripts/cut_demo.py master <컷 디렉터리> <출력>     # 전체 이어붙이기
 swift scripts/render_card.swift <폰트> <출력.png>           # #7 구조 카드
+
+python3 scripts/record_kmp.py <녹화 뿌리> [android] [ios] [desktop]   # #7 원본 셋, 탭 없이
+python3 scripts/cut_demo.py split <녹화 뿌리> <컷 디렉터리>            # #7 분할 (데스크톱이 있으면 셋)
+swift scripts/render_endcard.swift <폰트> <app-store.svg> <google-play.png> <출력.png>  # #9 끝 카드
+swift scripts/find_words.swift <그림.png> <단어…>                      # #3 강조 자리 (cut 이 부른다)
 ```
 
 컷마다 **원본의 어디서부터 쓰는지**는 `cut_demo.py` 의 `SOURCES` 에 적혀 있다.
@@ -242,26 +246,30 @@ Galaxy 와 iPhone 이 나란히 붙어도 티가 안 난다. 크롭 값은 녹�
 
 **#7 을 고를 때도 이 표를 피할 것.** 여기 있는 책이 또 나오면 서가가 얇아 보인다.
 
-### 데스크톱은 클릭 없이 맞춘다
+### 세 기기를 탭 없이 맞춘다 — 실행 옵션
 
-맥 창을 누르려면 손쉬운 사용 권한이 필요한데, 그 권한 없이도 #7 을 찍을 수 있어야 한다.
-그래서 데스크톱은 **고정값을 실행 옵션으로 받는다.** 덤으로 Demo 화면을 아예 열지
-않으므로 "한 프레임도 안 들어간다" 가 저절로 지켜진다.
+`simctl` 에는 탭이 없고, 맥 창을 누르려면 손쉬운 사용 권한이 필요하다. 그래서 촬영 고정을
+**실행 옵션으로** 받는다 (`DemoLaunchOptions`, 세 플랫폼 공용). 촬영 빌드만 읽는다.
 
-```bash
-./gradlew :desktopApp:run -Palmanac.demo=true \
-    -Palmanac.demo.weather=clear -Palmanac.demo.time=day \
-    -Palmanac.demo.seed=shared -Palmanac.demo.archive=refill
+| | 넣는 법 |
+|---|---|
+| Android | `adb shell am start -n com.dogdduddy.almanac/.MainActivity --es almanac.demo.weather clear …` |
+| iOS | `xcrun simctl launch booted com.dogdduddy.almanac -almanac.demo.weather clear …` |
+| 데스크톱 | `./gradlew :desktopApp:run -Palmanac.demo=true -Palmanac.demo.weather=clear …` |
 
-screencapture -v -V 12 -R 60,40,440,860 ~/almanac-footage/raw-desktop/07-kmp-desktop.mov
-```
+이름은 `almanac.demo.` 뒤에 `weather` · `time` · `seed=shared` · `archive=refill` · `turn=<밀리초>`.
+비우기 → 1.5초 → 채우기 → 2초 순서는 앱이 지킨다 (#7 의 "순서" 참고). `turn` 은 채우기가 끝나고
+그만큼 뒤에 **코드로 한 장 넘긴다** — 손으로 밀면 기기마다 속도가 달라, 나란히 놓으면 넘김의
+빠르기부터 다르게 보인다. Demo 화면을 아예 열지 않으므로 "한 프레임도 안 들어간다" 도 저절로
+지켜진다. `scripts/record_kmp.py` 가 이걸로 세 기기를 차례로 띄워 찍는다.
 
-창은 촬영 모드에서 **(60, 40) 에 뜨고 항상 위에 있다.** 자리를 안 박으면 녹화 영역을
-컷마다 다시 찾아야 하고, 위에 안 띄우면 앞에 온 창이 찍힌다 — 실제로 한 번
-Claude Code 창이 찍혔다. 녹화는 880×1720 · 60fps · h264 로 나온다.
+데스크톱 창은 촬영 모드에서 **(60, 40) 에 뜨고 항상 위에 있다.** 자리를 안 박으면 캡처 영역을
+매번 다시 찾아야 하고, 위에 안 띄우면 앞에 온 창이 찍힌다 — 실제로 한 번 Claude Code 창이 찍혔다.
+데스크톱은 #7 의 끝 2초에만 정지 화면으로 들어가므로 정지 캡처(880×1720)로 찍는다.
 
-**화면 기록 권한**은 필요하다 (시스템 설정 → 개인정보 보호 및 보안 → 화면 기록).
-정지 캡처만 되고 `screencapture -v` 가 실패하면 그 권한이 꺼져 있는 것이다.
+**화면 기록 권한이 없으면 정지 캡처도 창을 못 담는다** — 오류 없이 **바탕화면만** 찍힌다.
+예전에 "정지 캡처는 된다" 고 적었던 것은 틀렸다 (9/28 에 그렇게 찍혔다). 권한은 시스템 설정 →
+개인정보 보호 및 보안 → 화면 기록. `record_kmp.py` 는 찍은 뒤 종이색인지 보고 아니면 멈춘다.
 
 ### 찍으면서 알게 된 것
 
@@ -281,8 +289,24 @@ Claude Code 창이 찍혔다. 녹화는 880×1720 · 60fps · h264 로 나온다
   이 됐다. 본문이 화면 폭의 89% 를 쓰므로 1.12 가 한계다
 - **위치를 바꿔도 위젯은 따라오지 않는다.** iOS 앱이 `WidgetCenter.reloadAllTimelines()`
   를 부르지 않아서, 도시를 바꾸면 위젯이 최대 한 시간 동안 이전 도시의 문장을 들고 있다.
-  #6 은 앱과 위젯이 같은 문장임을 증명하는 컷이라 **찍기 전에 시뮬레이터를 재부팅**해
-  타임라인을 다시 만들게 했다. 앱 쪽 고침은 따로 잡아야 한다
+  이력을 비우고 채워도 마찬가지다 — 9/28 에 #7 을 찍은 뒤 iPhone 위젯은 Ethan Frome,
+  앱은 Riders of the Purple Sage 였다. 앱 쪽 고침은 따로 잡아야 한다
+- **재부팅 직후의 iOS 위젯은 검게 그려질 수 있다.** 9/25 에 재부팅하고 찍은 #6 은 위젯이
+  검은 바탕에 검은 글자라 읽히지 않았다 (지금은 정상이다). 그래서 #6 에서 **누르는 쪽을
+  Android 로 옮겼다** — 에뮬레이터는 adb 로 실제 위젯을 누를 수 있다
+- **Galaxy 는 화면 확대·글꼴 크기가 기본값이 아니었다.** 나란히 놓으니 본문이 iPhone 보다
+  18% 커서 줄바꿈이 다르고, 넘기기 전 2초 동안 작품명이 잘렸다. 분할(#7)은 **기본 설정인
+  Pixel 8 에뮬레이터**(411dp, 글꼴 1.0)로 찍고, 폭을 기기의 논리 폭에 비례해 잡는다
+  (`DEVICE_POINTS`). 시뮬레이터로 찍는 iPhone 과 같은 자격이다
+- **`am force-stop` 은 Glance 위젯을 불러오는 중 화면으로 되돌린다.** 위젯을 누르는 장면을
+  찍으려면 `am kill`(백그라운드에서만 조용히 죽인다)로 앱을 죽인다. 그러면 위젯은 그대로고,
+  누르면 앱이 차갑게 열리며 등장이 다시 돈다. 홈 버튼은 첫 페이지로 가므로 위젯이 있는
+  페이지로 한 번 밀어야 한다
+- **zoompan 은 시각을 보지 않는다** — 입력 한 장에 출력 한 장이다. 가변 프레임 녹화에
+  카메라 움직임을 걸면 멈춰 있던 구간이 한 프레임으로 접힌다. 먼저 60fps 로 채운다
+- **RGB 로 한 바퀴 돌면 밝기가 두 단계 내려간다** (swscale 기본값이 근사다). #3 의 강조는
+  색을 곱해야 해서 RGB 를 거치는데, 그대로 두니 화면이 종이 여백보다 어두워져 경계가 보였다.
+  `accurate_rnd+full_chroma_int` 로 왕복을 정확하게 한다
 - 자막은 ffmpeg 이 아니라 **CoreText** 로 굽는다. 이 머신의 ffmpeg 에는 drawtext 도
   subtitles 도 없고, 있었더라도 앱과 같은 엔진으로 조판하는 편이 낫다
 
@@ -305,7 +329,8 @@ Claude Code 창이 찍혔다. 녹화는 880×1720 · 60fps · h264 로 나온다
 감성만으로 14초를 넘기면 "무슨 앱인지" 가 늦는다
 
 ### #3 매칭 원리 · 0:14–0:26
-**화면** 날씨 칩 → 발췌문 속 날씨 단어가 은은하게 강조 (편집에서)
+**화면** 날씨 칩 → 발췌문 속 날씨 단어가 은은하게 강조 (편집에서 — `HIGHLIGHTS`.
+날씨 줄과 발췌문의 `rain` 이 4초에 같은 색으로 켜진다. 자리는 문자 인식이 찾는다)
 **자막** `Weather chooses today's page.`
 **촬영** demo 빌드. 실제 비가 오면 그대로. 아니면 촬영 메뉴로 rain 고정
 **비고** 선별 기준(날씨 단어 필수)이 화면에서 증명되는 장면
@@ -360,8 +385,13 @@ Claude Code 창이 찍혔다. 녹화는 880×1720 · 60fps · h264 로 나온다
 크로스 디졸브 없이 하드 컷으로 붙이는 편이 대비가 산다
 
 ### #6 생활 속 사용 · 위젯 · 0:53–1:08
-**화면** Android 홈 화면 Glance 위젯 → iPhone 홈 화면 위젯 →
-**위젯을 눌러 앱으로 들어가 같은 문장이 열리는 것까지**
+**화면** iPhone 홈 화면 위젯 (5.5초, 천천히 다가감) → Android 홈 화면 Glance 위젯 →
+**위젯을 눌러 앱으로 들어가 같은 문장이 열리는 것까지** (9.5초)
+
+> 원래는 iPhone 쪽에서 눌렀다. 9/25 녹화의 위젯이 검게 그려져 버렸고, 시뮬레이터에는 탭 수단이
+> 없어 다시 찍을 수 없으므로 **누르는 쪽을 Android 로 옮겼다** (에뮬레이터, adb 로 실제 탭).
+> iPhone 위젯과 Android 위젯의 문장은 서로 다르다 — 기기가 다르니 당연하고, 이 컷이 증명하는
+> 것은 **한 기기 안에서** 위젯과 앱이 같다는 것이다.
 **자막** 없음 (화면이 스스로 설명한다)
 **촬영** demo 빌드. **고정 없음** (iOS 위젯이 고정을 못 본다)
 **비고** 위젯 → 앱 진입을 한 호흡에 담으면 "앱과 위젯이 어긋나지 않는다" 가 말 없이 증명된다.
@@ -400,13 +430,14 @@ Compose · Glance     Compose · WidgetKit  Compose
 "모든 UI 가 플랫폼 네이티브 프레임워크" 로 읽힐 수 있는데 사실이 아니다.
 다섯이라는 수는 구조와 정확히 맞고 카드가 그대로 증명한다.
 
-데스크톱 창은 폰 비율(440×860)이라 그대로 들어간다.
-다만 **데스크톱 푸터에는 `The shelf` 가 없다**(결제 없음) — 푸터를 클로즈업하지 말 것
+데스크톱 창은 폰 비율(440×860)이라 그대로 들어간다. 끝 2초에 가운데로 들어오고, 셋의
+**본문 윗줄**을 맞춘다 — 폰은 상태바를 잘라냈고 창은 제목 표시줄을 남겼으므로 창만 그만큼
+위에서 시작한다 (`DESKTOP_TITLE_BAR`, 첫 캡처에서 실측할 것).
 
 > **세 화면을 맞추는 순서** (이 순서여야 한다)
 > 0. 셋 다 **보유 팩이 같아야 한다.** 후보 풀이 보유 팩으로 걸러지므로
 >    (`candidateIdsForBucket(..., owned)`) 한 대만 잠겨 있으면 절대 같은 문장이 안 나온다.
->    코드로 셋 다 열어둘 것 — 데스크톱도 입력란이 있다 (promo-code.md)
+>    **셋 다 잠근 채로 둔다** — 앞 컷들이 전부 잠긴 서가다 (아래 "촬영일에 정할 것" 1)
 > 1. 셋 다 위치를 Seoul 로 고정
 > 2. Demo controls → Seed → **Shared seed**
 > 3. Demo controls → 날씨와 시간대를 **같은 값**으로 고정
@@ -432,6 +463,9 @@ Compose · Glance     Compose · WidgetKit  Compose
 > (`seedArchive` 가 촬영용 시드를 안 쓰던 버그. 지금은 고쳐졌고 테스트가 지킨다).
 >
 > **Demo 화면은 절대 프레임에 들어가면 안 된다.**
+>
+> 2–5 는 이제 실행 옵션이 한다 (`record_kmp.py`, 위 "세 기기를 탭 없이 맞춘다").
+> 손으로 맞출 때만 이 순서를 지키면 된다.
 
 ### #8 구매 · RevenueCat 증명 · 1:22–1:38
 **화면** (16초)
@@ -469,7 +503,10 @@ Play Billing 을 직접 써도 똑같이 뜬다. 증명은 두 장면의 **연�
 **화면** #1 의 하늘로 돌아와 마지막 발췌문 → 앱 이름 → 스토어 뱃지
 **자막** `Look up. Read back.`
 **촬영** demo 빌드
-**비고** 하단에 작게 `Weather data: MET Norway` — CC BY 4.0 표기 의무다.
+**비고** 페이지 3.4초 → 디졸브 0.6초 → 끝 카드 (`render_endcard.swift`). 배지는 두 스토어의
+공식 파일이다 (`~/almanac-footage/badges`, 받는 곳은 스크립트 머리에).
+하단에 작게 `Weather data: MET Norway` — CC BY 4.0 표기 의무다. 카드에는 앱 About 과 같은
+문장(`MetNorwayClient.ATTRIBUTION`)을 싣는다.
 앱 About 의 표기는 이미 출처와 라이선스를 적고 있어 요건은 충족한다.
 원본·라이선스 링크를 거는 것은 선택이다 (`MetNorwayClient.ATTRIBUTION`).
 
