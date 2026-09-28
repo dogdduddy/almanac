@@ -2,6 +2,7 @@ package com.dogdduddy.almanac
 
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -10,10 +11,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
-import com.dogdduddy.almanac.core.TimeOfDay
-import com.dogdduddy.almanac.core.WeatherGroup
-import com.dogdduddy.almanac.demo.DemoControls
-import kotlinx.coroutines.delay
+import com.dogdduddy.almanac.demo.DemoLaunchOptions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -46,23 +44,16 @@ fun main() = application {
         )
     }
 
+    // 촬영 고정을 실행 옵션으로 받는다. 폰과 같은 이름·같은 순서다 (DemoLaunchOptions).
+    val launch = remember {
+        if (demoTools) DemoLaunchOptions.parse(System::getProperty) else DemoLaunchOptions()
+    }
+    var turns by remember { mutableIntStateOf(0) }
+
     LaunchedEffect(Unit) {
-        applyDemoProperties()
+        launch.applyTo(DesktopAlmanacGraph.demo)
         loader.start()
-        if (System.getProperty("almanac.demo.archive") == "refill") {
-            // 비우고 채운다. 비우기만 하면 넘길 것이 없다 — 넘기기는 아카이브를
-            // 탐색할 뿐 만들지 않는다.
-            //
-            // **사이를 기다려야 폰과 같은 아카이브가 나온다.** 비우기는 오늘 페이지를
-            // 다시 그려 기록하는데, 그게 끝나기 전에 채우기 시작하면 오늘 슬롯이
-            // 히스토리에 없는 상태로 과거를 고르게 된다. 읽음 횟수와 최근 목록이
-            // 선택의 입력이라(결정론 계약 2.7) 거기서 폰과 갈렸다.
-            // 폰에서는 사람이 두 줄을 몇 초 간격으로 누르므로 저절로 지켜진다.
-            loader.resetHistory()
-            delay(1_500)
-            loader.fillArchive()
-            delay(2_000)        // 채우는 동안 화면이 자리를 잡게 둔다
-        }
+        launch.stage(loader) { turns++ }
     }
 
     Window(
@@ -97,7 +88,7 @@ fun main() = application {
                 onRedeemCode = loader::redeem,
                 shelfNote = "This computer has no store. The full collection is " +
                     "bought on iPhone and Android, or opened here with a code.",
-                demo = demoActions(loader),
+                demo = demoActions(loader, turns),
             ),
         )
     }
@@ -123,41 +114,22 @@ const val DEMO_WINDOW_X = 60
 const val DEMO_WINDOW_Y = 40
 
 /**
- * 촬영 고정을 **실행 옵션으로** 받는다.
- *
- * 데스크톱에만 있는 창구다. 폰은 화면을 눌러 맞추면 되지만 맥 창을 누르려면
- * 손쉬운 사용 권한이 필요하고, 그 권한 없이도 분할 화면(#7)을 찍을 수 있어야 한다.
- * 덤으로 **Demo 화면을 아예 열지 않아도 된다** — 한 프레임도 안 들어가는 것이 요구다.
+ * 촬영 고정 창구. 고정값은 **실행 옵션으로도** 받는다 (DemoLaunchOptions) —
+ * 맥 창을 누르려면 손쉬운 사용 권한이 필요하고, 그 권한 없이도 분할 화면(#7)을
+ * 찍을 수 있어야 한다.
  *
  *   ./gradlew :desktopApp:run -Palmanac.demo=true \
  *       -Palmanac.demo.weather=clear -Palmanac.demo.time=day \
- *       -Palmanac.demo.seed=shared -Palmanac.demo.archive=refill
- *
- * 모르는 값이 오면 조용히 넘긴다 — 촬영 중에 앱이 안 뜨는 것이 제일 나쁘다.
+ *       -Palmanac.demo.seed=shared -Palmanac.demo.archive=refill -Palmanac.demo.turn=6000
  */
-private fun applyDemoProperties() {
-    if (!demoTools) return
-    val demo: DemoControls = DesktopAlmanacGraph.demo
-
-    System.getProperty("almanac.demo.weather")?.let { key ->
-        demo.weatherGroup = WeatherGroup.entries.firstOrNull { it.key == key.lowercase() }
-        demo.temperatureC = demo.weatherGroup?.let { DemoControls.defaultTemperature(it) }
-    }
-    System.getProperty("almanac.demo.time")?.let { key ->
-        demo.timeOfDay = TimeOfDay.entries.firstOrNull { it.key == key.lowercase() }
-    }
-    if (System.getProperty("almanac.demo.seed") == "shared") {
-        demo.installId = DemoControls.SHARED_SEED_INSTALL_ID
-    }
-}
-
-private fun demoActions(loader: AppLoader): DemoActions? =
+private fun demoActions(loader: AppLoader, turns: Int): DemoActions? =
     if (!demoTools) null
     else DemoActions(
         controls = DesktopAlmanacGraph.demo,
         onApply = loader::refresh,
         onResetHistory = loader::resetHistory,
         onFillArchive = loader::fillArchive,
+        turns = turns,
     )
 
 private fun openInBrowser(url: String) {

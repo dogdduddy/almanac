@@ -3,6 +3,7 @@ package com.dogdduddy.almanac
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -11,6 +12,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import com.dogdduddy.almanac.billing.createIosBilling
+import com.dogdduddy.almanac.demo.DemoLaunchOptions
+import platform.Foundation.NSUserDefaults
 import platform.UIKit.UIViewController
 import platform.UIKit.UIApplicationDidBecomeActiveNotification
 import platform.Foundation.NSNotificationCenter
@@ -48,12 +51,23 @@ fun MainViewController(demoTools: Boolean = false): UIViewController = ComposeUI
         )
     }
 
+    // 촬영 고정을 실행 옵션으로 받는다 (DemoLaunchOptions). `simctl` 에는 탭이 없어서다.
+    //   xcrun simctl launch booted com.dogdduddy.almanac -almanac.demo.weather clear …
+    // `-이름 값` 인자는 NSUserDefaults 의 인자 도메인으로 들어온다. 촬영 빌드만 읽는다.
+    val launch = remember {
+        if (demoTools) DemoLaunchOptions.parse { NSUserDefaults.standardUserDefaults.stringForKey(it) }
+        else DemoLaunchOptions()
+    }
+    var turns by remember { mutableIntStateOf(0) }
+
     LaunchedEffect(Unit) {
         // 결제 구현 주입. 앱에서만 하고 위젯은 하지 않는다.
         // **시작보다 반드시 앞서야 한다** — EntitlementSync 의 lazy 가 처음 만들어질 때
         // 이 값을 붙들기 때문에, 늦으면 결제가 PreviewBilling 으로 조용히 죽는다.
         IosAlmanacGraph.billing = createIosBilling()
+        launch.applyTo(IosAlmanacGraph.demo)
         loader.start()
+        launch.stage(loader) { turns++ }
     }
 
     DisposableEffect(loader) {
@@ -91,6 +105,7 @@ fun MainViewController(demoTools: Boolean = false): UIViewController = ComposeUI
                 onApply = loader::refresh,
                 onResetHistory = loader::resetHistory,
                 onFillArchive = loader::fillArchive,
+                turns = turns,
             ),
         ),
     )

@@ -130,6 +130,11 @@ data class DemoActions(
     val onResetHistory: () -> Unit,
     /** 지난 날짜의 페이지를 채운다. 역방향 넘김 컷에 넘길 과거가 필요하다. */
     val onFillArchive: () -> Unit,
+    /**
+     * 자동 넘김 요청 횟수. 늘어날 때마다 한 장 넘긴다 (DemoLaunchOptions.turnAfterMillis).
+     * 사람이 밀어 넘기는 것과 **같은 페이저**를 움직이므로 넘김의 모양도 같다.
+     */
+    val turns: Int = 0,
 )
 
 private enum class Screen { PAGES, CITIES, ABOUT, PAYWALL, DEMO }
@@ -237,6 +242,14 @@ private fun Pages(
         if (pagerState.settledPage != lastSettled) {
             lastSettled = pagerState.settledPage
             haptics.play(PAGE_TURN_HAPTIC)
+        }
+    }
+
+    // 촬영용 자동 넘김. 분할 화면(#7)의 기기들이 같은 곡선으로 넘어가야 나란히 놓아도 맞는다.
+    val demoTurns = actions.demo?.turns ?: 0
+    LaunchedEffect(demoTurns) {
+        if (demoTurns > 0 && pagerState.currentPage + 1 < pages.size) {
+            pagerState.animateScrollToPage(pagerState.currentPage + 1)
         }
     }
 

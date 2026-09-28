@@ -39,7 +39,7 @@ tasks.test {
  *
  *   ./gradlew :desktopApp:run -Palmanac.demo=true \
  *       -Palmanac.demo.weather=clear -Palmanac.demo.time=day \
- *       -Palmanac.demo.seed=shared -Palmanac.demo.archive=refill
+ *       -Palmanac.demo.seed=shared -Palmanac.demo.archive=refill -Palmanac.demo.turn=6000
  *
  * 환경 변수로 하지 않는 이유: Gradle 은 앱을 **데몬의 환경**으로 띄워서, 셸에서 앞에
  * 붙인 변수가 들어가지 않는다. 기본값이 false 라 그냥 띄우면 진입점이 없다.
@@ -50,7 +50,7 @@ tasks.test {
  */
 tasks.withType<JavaExec>().configureEach {
     listOf("almanac.demo", "almanac.demo.weather", "almanac.demo.time",
-           "almanac.demo.seed", "almanac.demo.archive").forEach { key ->
+           "almanac.demo.seed", "almanac.demo.archive", "almanac.demo.turn").forEach { key ->
         providers.gradleProperty(key).orNull?.let { systemProperty(key, it) }
     }
     // 안 주면 꺼진 것으로 본다. 스토어로 나가는 빌드에는 이 태스크가 없다.

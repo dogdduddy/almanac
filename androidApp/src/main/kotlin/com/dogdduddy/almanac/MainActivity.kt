@@ -8,10 +8,12 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.glance.appwidget.updateAll
 import androidx.lifecycle.lifecycleScope
+import com.dogdduddy.almanac.demo.DemoLaunchOptions
 import com.dogdduddy.almanac.widget.AlmanacWidget
 import com.dogdduddy.almanac.widget.AlmanacWidgetReceiver
 import kotlinx.coroutines.channels.Channel
@@ -21,6 +23,9 @@ class MainActivity : ComponentActivity() {
 
     private var state by mutableStateOf<AppState>(AppState.Loading)
     private var hasResumedOnce = false
+
+    /** 촬영용 자동 넘김 요청 횟수 (DemoLaunchOptions.turnAfterMillis). */
+    private var demoTurns by mutableIntStateOf(0)
 
     /**
      * 앱이 새 페이지를 그리면 홈 화면 위젯도 같은 저장 위치와 슬롯으로 다시 그린다.
@@ -87,9 +92,16 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // 촬영 고정을 실행 옵션으로 받는다 (DemoLaunchOptions). 세 기기를 같은 이름으로 맞춘다.
+        //   adb shell am start -n com.dogdduddy.almanac/.MainActivity --es almanac.demo.weather clear …
+        val launch = if (BuildConfig.DEMO_TOOLS) DemoLaunchOptions.parse(intent::getStringExtra)
+            else DemoLaunchOptions()
+        launch.applyTo(AlmanacGraph.demo)
+
         // **화면부터 세우고 권한을 묻는다.** 순서가 반대면 프롬프트 뒤가 빈 화면이고,
         // 유저가 답할 때까지 앱은 아무것도 아닌 것처럼 보인다.
         loader.start()
+        lifecycleScope.launch { launch.stage(loader) { demoTurns++ } }
 
         val source = com.dogdduddy.almanac.location.AndroidLocationSource(this)
         if (!source.hasPermission()) {
@@ -120,6 +132,7 @@ class MainActivity : ComponentActivity() {
             onApply = loader::refresh,
             onResetHistory = loader::resetHistory,
             onFillArchive = loader::fillArchive,
+            turns = demoTurns,
         )
 
     private fun publishState(next: AppState) {
