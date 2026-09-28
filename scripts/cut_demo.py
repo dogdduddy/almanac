@@ -132,13 +132,20 @@ END_CARDS = {
     "09-outro": ("cards/09-end.png", 3.4, 0.6),
 }
 
-#: 아직 한쪽만 찍힌 컷. 완성되면 `SOURCES` 로 옮긴다.
+#: 조각 여럿을 하드 컷으로 잇는 컷. (원본, 시작, 길이, 카메라 움직임) — 길이의 합이 컷 길이다.
 #:
-#: `06-widgets` 는 Android 홈 화면과 iPhone 홈 화면을 둘 다 보여줘야 하는데
-#: Android 기기가 없어 iOS 쪽만 있다. 그 안에서 쓸 구간을 적어 둔다 —
-#: 3.3초에서 시작하면 홈 화면 2초, 위젯 탭, 앱이 같은 문장으로 열리는 데까지 담긴다.
-PENDING = {
-    "06-widgets": [("raw-ios/06-widget-ios.mp4", 3.30, "iPhone 쪽 절반")],
+#: #6 은 두 기기의 홈 화면 위젯을 보여준 뒤, 위젯을 눌러 앱이 **같은 문장으로** 열리는
+#: 데까지다. 누르는 쪽은 Android 다 — iOS 시뮬레이터에는 탭 수단이 없고, 에뮬레이터는
+#: adb 로 실제 위젯을 누른다. 앱은 죽여 둔 상태라(`am kill`) 위젯에서 차갑게 열린다.
+#: iPhone 쪽은 홈 화면 한 장이라 천천히 다가가서 정지화면으로 안 보이게 한다.
+#:
+#: 9/25 의 iPhone 녹화는 버렸다. 재부팅 직후라 위젯이 검은 바탕에 검은 글자로 그려져
+#: 읽히지 않았다. 지금 원본은 2026-09-28 에 다시 찍은 것이다.
+SEQUENCES = {
+    "06-widgets": [
+        ("raw-ios/06-widget-ios.png",         0.0, 5.5, (1.00, 1.08, 0.5, 0.12)),
+        ("raw-android/06-widget-android.mp4", 0.0, 9.5, (1.00, 1.04, 0.5, 0.15)),
+    ],
 }
 
 #: 컷 안의 카메라 움직임. (시작 배율, 끝 배율, 가로 초점, 세로 초점)
@@ -297,6 +304,11 @@ def prepare_cut(src: str, dst: str, *, start: float, length: float,
                 f"format=gbrp[cut];"
                 f"[cut][hl]blend=all_mode=multiply,"
                 f"scale=out_color_matrix=bt709:out_range=tv:{exact},format=yuv420p,")
+    elif move and not still:
+        # **zoompan 은 입력 한 장에 출력 한 장을 낸다** — 시각을 보지 않는다. 가변 프레임
+        # 녹화를 그대로 넣으면 화면이 멈춰 있던 구간이 한 프레임으로 접힌다. #6 에서 위젯을
+        # 보여주던 2.6초가 사라지고 앱이 바로 열렸다. 먼저 60fps 로 채운다.
+        crop = f"fps=60,{crop}"
 
     base = (
         f"{mask}{head}"
@@ -561,11 +573,45 @@ def split(raw_root: str, parts_dir: str, name: str = "07a-kmp") -> None:
     print(f"  {mark} {name}  {length:.1f}초 (실제 {made:.2f})  ← 분할 {shape}")
 
 
+def sequence(name: str, raw_root: str, parts_dir: str) -> None:
+    """`SEQUENCES` 의 조각들을 각각 만들어 하드 컷으로 잇는다."""
+    lengths = {n: length for n, length, _ in TIMELINE}
+    numbers = {n: number for n, _, number in TIMELINE}
+    line = SUBTITLES[numbers[name]].replace("{N}", YEARS) if numbers[name] else None
+    pieces = SEQUENCES[name]
+    total = sum(length for _, _, length, _ in pieces)
+    if abs(total - lengths[name]) > 0.01:
+        raise SystemExit(f"{name} 조각의 합이 {total:.2f}초다. 콘티는 {lengths[name]:.1f}초.")
+
+    os.makedirs(parts_dir, exist_ok=True)
+    dst = f"{parts_dir}/{name}.mp4"
+    with tempfile.TemporaryDirectory() as tmp:
+        listing = f"{tmp}/parts.txt"
+        with open(listing, "w") as f:
+            for i, (rel, start, length, move) in enumerate(pieces):
+                src = os.path.join(raw_root, rel)
+                if not os.path.isfile(src):
+                    raise SystemExit(f"녹화가 없다: {src}")
+                part = f"{tmp}/part{i}.mp4"
+                prepare_cut(src, part, start=start, length=length, label=None,
+                            cache_dir=tmp, subtitle=line, move=move)
+                f.write(f"file '{part}'\n")
+        run(["ffmpeg", "-v", "error", "-f", "concat", "-safe", "0",
+             "-i", listing, "-c", "copy", "-y", dst])
+    made = duration(dst)
+    mark = "✓" if abs(made - lengths[name]) < 0.15 else "!"
+    shape = " → ".join(os.path.basename(rel) for rel, _, _, _ in pieces)
+    print(f"  {mark} {name}  {lengths[name]:.1f}초 (실제 {made:.2f})  ← {shape}")
+
+
 def cut(name: str, raw_root: str, parts_dir: str) -> None:
     """컷 하나를 원본에서 잘라낸다. 길이는 콘티가 정하고, 시작은 `SOURCES` 가 정한다."""
     lengths = {n: length for n, length, _ in TIMELINE}
     if name not in lengths:
         raise SystemExit(f"콘티에 없는 컷: {name}\n있는 것: " + ", ".join(lengths))
+    if name in SEQUENCES:
+        sequence(name, raw_root, parts_dir)
+        return
     if name not in SOURCES:
         raise SystemExit(f"원본이 어디인지 모른다: {name} (SOURCES 에 적을 것)")
 
