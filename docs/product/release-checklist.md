@@ -16,8 +16,8 @@
 
 ## 제출 전에 결정할 것
 
-- [ ] 출시 버전 통일: Android `0.3.1 (4)`, iOS `0.3.0 (5)` 중 공개 버전명을 정한다.
-  이미 App Store Connect 에 올린 빌드가 있으면 빌드 번호는 반드시 더 크게 잡는다.
+- [x] 출시 버전 통일: 2026-09-28 에 둘 다 `0.4.0` 으로 맞췄다 — Android `(5)`, iOS `(6)`.
+  다음 업로드는 빌드 번호를 반드시 더 크게 잡는다.
 - [ ] 출시 국가와 기준 가격 확정. 현재 제안은 USD 3.99 비소모품이다.
 - [ ] 자동 출시가 아니라 수동 출시로 두어 양 스토어의 공개 시점을 맞춘다.
 
@@ -35,9 +35,14 @@
 
 ## 내부 테스트
 
-- [ ] Play 내부 테스트 트랙에 Release AAB 업로드
+- [ ] Play 내부 테스트 트랙에 Release AAB 업로드 — `0.4.0 (5)` AAB 는 2026-09-28 에 만들었다
+  (`androidApp/build/outputs/bundle/release/almanac-0.4.0-5.aab`). 콘솔 업로드는 손으로 한다
+  (Play 게시 API 자격 증명이 없다)
 - [ ] 라이선스 테스터 계정으로 새 설치 → 구매 → 재실행 → 복원 확인
-- [ ] TestFlight 내부 테스트에 Release 아카이브 업로드
+- [x] TestFlight 내부 테스트에 Release 아카이브 업로드 — `0.4.0 (6)`, 2026-09-28.
+  `xcodebuild -exportArchive` 로 Xcode 계정을 써서 올렸다 (`iosApp/build/AppStoreExportOptions.plist`)
+- [ ] TestFlight 의 **수출 규정 준수(암호화)** 질문에 답한다. Info.plist 에
+  `ITSAppUsesNonExemptEncryption` 이 없어서 빌드마다 묻는다 — 답이 정해지면 키로 넣을지 결정
 - [ ] 샌드박스 계정으로 새 설치 → 구매 → 재실행 → 복원 확인
 - [ ] iOS Sandbox Offer Code와 Play 1회용 프로모션 코드 사용 후 앱 복귀 즉시 서가가 열리는지 확인
 - [ ] 구매/복원 뒤 위젯이 유료 문장을 표시하는지 확인
