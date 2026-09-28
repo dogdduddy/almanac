@@ -418,9 +418,10 @@ SPLIT_SOURCES = [
 SPLIT_DESKTOP = ("raw-desktop/07-kmp-desktop.png", "Desktop")
 SPLIT_TRIO = 2.0
 
-#: 데스크톱 캡처의 제목 표시줄 높이 (캡처 픽셀). 셋의 **본문 윗줄**을 맞추려면
-#: 창만 이만큼 위로 올려야 한다 — 폰은 상태바를 잘라냈고 창은 제목 표시줄을 남겼다.
-DESKTOP_TITLE_BAR = 56
+#: 첫 글자 줄을 찾을 때의 밝기 (회색조). 종이(FBF9F4)는 249, 창의 제목 표시줄은 241,
+#: 날짜 줄의 흐린 글자(8A8378)는 131 이다.
+PAPER_LUMA = 245
+INK_LUMA = 180
 
 #: 컷 안에서 넘김이 일어나는 시각. 앞은 "같은 문장" 을 보여주고, 뒤는 읽을 시간이다.
 SPLIT_TURN_AT = 2.2
@@ -453,6 +454,54 @@ def points(path: str) -> float:
             f"{size[0]}x{size[1]} 의 논리 폭을 모른다 ({path}).\n"
             f"아는 기기: {known}. 분할은 글자 크기를 맞춰야 하므로 DEVICE_POINTS 에 한 줄 더할 것.")
     return DEVICE_POINTS[size]
+
+
+def ink_top(src: str, at: float) -> int:
+    """시스템 영역을 뺀 원본의 [at] 초 프레임에서 **첫 글자 줄의 윗끝** (원본 픽셀).
+
+    창의 제목 표시줄은 건너뛴다 — 한 줄이 통째로 종이색인 곳이 처음 나온 뒤부터 찾는다.
+    가장자리 2% 는 보지 않는다. 창 캡처의 테두리 한 픽셀이 종이색이 아니다.
+    """
+    top, bottom = crop_for(src)
+    w, h = frame_size(src)
+    h -= top + bottom
+    x0 = w // 50
+    cw = w - 2 * x0
+    # 분할은 녹화 끝을 복제해 늘려 쓰므로 [at] 이 파일보다 뒤일 수 있다. 그때는 마지막
+    # 프레임인데, 가변 프레임 녹화는 마지막 장이 파일 끝보다 0.1초쯤 앞에 있어서 끝 근처로
+    # 탐색하면 아무것도 안 나온다. 끝 1초를 전부 풀고 마지막 장을 쓴다.
+    if src.lower().endswith(".png"):
+        pick = ["-i", src, "-frames:v", "1"]
+    elif at < duration(src) - 0.5:
+        pick = ["-ss", f"{at}", "-i", src, "-frames:v", "1"]
+    else:
+        pick = ["-sseof", "-1", "-i", src]
+    raw = subprocess.run(
+        ["ffmpeg", "-v", "error", *pick,
+         "-vf", f"crop={cw}:{h}:{x0}:{top},format=gray", "-f", "rawvideo", "-"],
+        capture_output=True).stdout
+    raw = raw[len(raw) - len(raw) % (cw * h) - cw * h:] if len(raw) >= cw * h else b""
+    rows = [raw[y * cw:(y + 1) * cw] for y in range(len(raw) // cw)]
+    paper = next((y for y, r in enumerate(rows) if min(r) >= PAPER_LUMA), None)
+    ink = next((y for y in range(paper or 0, len(rows)) if min(rows[y]) < INK_LUMA), None)
+    if paper is None or ink is None:
+        raise SystemExit(f"{src} 의 {at}초 프레임에서 글자 줄을 못 찾았다.")
+    return ink
+
+
+def align_tops(tiles: list[dict], top: int, height: int) -> None:
+    """나란히 놓은 화면들의 **첫 글자 줄(날짜)** 을 한 높이에 맞춘다. 아래 끝은 셋이 같다.
+
+    폰은 상태바를 잘라냈고 창은 제목 표시줄을 남겼다. 게다가 앱의 위 여백이 표면마다
+    달라서 — 9/28 캡처에서 창의 날짜 줄은 폰보다 70px 아래, 두 폰끼리도 20px 어긋났다 —
+    제목 표시줄 높이만 빼서는 맞지 않는다. 그래서 재지 않고 **찾는다.** 가장 아래에 있는
+    것에 맞추므로 나머지는 그만큼 내려가고, 내려간 만큼 아래의 빈 종이를 덜 보인다.
+    """
+    offsets = [ink_top(t["src"], t["start"]) * t["w"] / frame_size(t["src"])[0] for t in tiles]
+    lowest = max(offsets)
+    for t, offset in zip(tiles, offsets):
+        shift = int(round((lowest - offset) / 2)) * 2   # yuv420 은 짝수 높이여야 한다
+        t["y"], t["h"] = top + shift, height - shift
 
 
 def compose(tiles: list[dict], length: float, line: str | None, dst: str, tmp: str,
@@ -540,6 +589,7 @@ def split(raw_root: str, parts_dir: str, name: str = "07a-kmp") -> None:
                             w=w, h=SPLIT_PHONE_H, label=label,
                             label_y=SPLIT_TOP + SPLIT_PHONE_H + 14))
             x += w + SPLIT_GAP
+        align_tops(duo, SPLIT_TOP, SPLIT_PHONE_H)
         duo_dst = dst if not trio else f"{tmp}/duo.mp4"
         compose(duo, duo_length + (TRIO_FADE if trio else 0), line, duo_dst, tmp)
 
@@ -548,18 +598,15 @@ def split(raw_root: str, parts_dir: str, name: str = "07a-kmp") -> None:
             order = [phones[0], (desk_src, None, SPLIT_DESKTOP[1]), phones[1]]
             widths = [int(round(points(src) * TRIO_SCALE / 2) * 2) for src, _, _ in order]
             x = (OUT_W - sum(widths) - TRIO_GAP * (len(order) - 1)) // 2
-            bar = int(round(DESKTOP_TITLE_BAR * widths[1] / frame_size(desk_src)[0]))
             tiles = []
             for (src, turn_at, label), w in zip(order, widths):
                 desk = turn_at is None
                 tiles.append(dict(
                     src=src, x=x, w=w, label=label,
                     start=0.0 if desk else max(turn_at - SPLIT_TURN_AT, 0.0) + duo_length,
-                    # 본문 윗줄을 맞춘다. 창은 제목 표시줄만큼 위에서 시작하고, 아래 끝은 셋이 같다.
-                    y=SPLIT_TOP if desk else SPLIT_TOP + bar,
-                    h=TRIO_H if desk else TRIO_H - bar,
                     label_y=SPLIT_TOP + TRIO_H + 14))
                 x += w + TRIO_GAP
+            align_tops(tiles, SPLIT_TOP, TRIO_H)
             trio_dst = f"{tmp}/trio.mp4"
             compose(tiles, SPLIT_TRIO, line, trio_dst, tmp)
             run(["ffmpeg", "-v", "error", "-i", duo_dst, "-i", trio_dst, "-filter_complex",

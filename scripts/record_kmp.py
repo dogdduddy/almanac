@@ -55,9 +55,19 @@ TURN = int(OPTIONS["almanac.demo.turn"]) / 1000
 #: 넘긴 뒤 새 페이지의 등장까지 담는 여유.
 AFTER = 3.5
 
-#: 데스크톱 창 자리 (Main.kt 의 DEMO_WINDOW_X/Y 와 창 크기).
-DESKTOP_REGION = "60,40,440,860"
+#: 데스크톱 창의 크기와, 화면 왼쪽 위에서 떨어진 거리 (Main.kt 의 DEMO_WINDOW_X/Y).
+DESKTOP_SIZE = (440, 860)
+DESKTOP_INSET = (60, 40)
 DESKTOP_MAIN = "com.dogdduddy.almanac.MainKt"
+
+#: 2배율 화면의 왼쪽 위 (전역 좌표 · 위가 원점). AppKit 은 아래가 원점이라 뒤집는다.
+RETINA_ORIGIN = """
+import AppKit
+let top = NSScreen.screens[0].frame.maxY
+for s in NSScreen.screens where s.backingScaleFactor >= 2 {
+    print(Int(s.frame.minX), Int(top - s.frame.maxY), Int(s.frame.height)); break
+}
+"""
 
 
 def android(root: str) -> str:
@@ -87,10 +97,27 @@ def ios(root: str) -> str:
     return out
 
 
+def window_origin() -> tuple[int, int]:
+    """창을 띄울 자리. **2배율 화면이 있으면 그쪽이다.**
+
+    9/28 에 주 화면이 1배율 외부 모니터(1920×1080)라 캡처가 440×860 으로 나왔다. 셋을
+    나란히 놓으면 창만 1.3 배로 늘어나 폰 둘 사이에서 혼자 흐리다. 노트북 화면(2배율)에
+    띄우면 880×1720 이다.
+    """
+    out = subprocess.run(["swift", "-"], input=RETINA_ORIGIN, capture_output=True,
+                         text=True).stdout.split()
+    if len(out) == 3 and int(out[2]) >= DESKTOP_INSET[1] + DESKTOP_SIZE[1]:
+        return int(out[0]) + DESKTOP_INSET[0], int(out[1]) + DESKTOP_INSET[1]
+    return DESKTOP_INSET
+
+
 def desktop(root: str) -> str:
     out = f"{root}/raw-desktop/07-kmp-desktop.png"
     os.makedirs(os.path.dirname(out), exist_ok=True)
-    props = [f"-P{key}={value}" for key, value in {"almanac.demo": "true", **OPTIONS}.items()]
+    x, y = window_origin()
+    region = f"{x},{y},{DESKTOP_SIZE[0]},{DESKTOP_SIZE[1]}"
+    props = [f"-P{key}={value}" for key, value in
+             {"almanac.demo": "true", "almanac.demo.window": f"{x},{y}", **OPTIONS}.items()]
     gradle = subprocess.Popen(
         [f"{ROOT}/gradlew", ":desktopApp:run", "--console=plain", *props],
         cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -105,17 +132,31 @@ def desktop(root: str) -> str:
             raise SystemExit("데스크톱 앱이 뜨지 않았다.")
         # 창이 뜨고 첫 컴포지션이 도는 데 JVM 이 몇 초 더 쓴다.
         time.sleep(3.0 + STAGED + TURN + AFTER)
-        subprocess.run(["screencapture", "-x", "-R", DESKTOP_REGION, out], check=True)
+        subprocess.run(["screencapture", "-x", "-R", region, out], check=True)
         if not looks_like_paper(out):
             os.remove(out)
             raise SystemExit(
                 "창 대신 바탕화면이 찍혔다 — 화면 기록 권한이 없다.\n"
                 "시스템 설정 → 개인정보 보호 및 보안 → 화면 기록 에서 이 터미널을 켜고 다시 돌릴 것.\n"
                 "(폰 둘과 같은 날이어야 한다. 날이 바뀌었으면 셋 다 다시 찍는다.)")
+        size = capture_size(out)
+        if size != (DESKTOP_SIZE[0] * 2, DESKTOP_SIZE[1] * 2):
+            raise SystemExit(
+                f"캡처가 {size[0]}×{size[1]} 이다 — 창이 2배율 화면에 뜨지 않았다.\n"
+                "노트북 화면을 켜 두거나(덮개를 열고), 2배율 화면을 하나 연결하고 다시 돌릴 것.\n"
+                f"파일은 남겨 둔다: {out}")
     finally:
         subprocess.run(["pkill", "-f", DESKTOP_MAIN], capture_output=True)
         gradle.wait(timeout=60)
     return out
+
+
+def capture_size(png: str) -> tuple[int, int]:
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "stream=width,height", "-of", "csv=p=0",
+         png], capture_output=True, text=True).stdout.strip()
+    w, h = out.split(",")[:2]
+    return int(w), int(h)
 
 
 def looks_like_paper(png: str) -> bool:

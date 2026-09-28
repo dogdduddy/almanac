@@ -50,7 +50,8 @@ tasks.test {
  */
 tasks.withType<JavaExec>().configureEach {
     listOf("almanac.demo", "almanac.demo.weather", "almanac.demo.time",
-           "almanac.demo.seed", "almanac.demo.archive", "almanac.demo.turn").forEach { key ->
+           "almanac.demo.seed", "almanac.demo.archive", "almanac.demo.turn",
+           "almanac.demo.window").forEach { key ->
         providers.gradleProperty(key).orNull?.let { systemProperty(key, it) }
     }
     // 안 주면 꺼진 것으로 본다. 스토어로 나가는 빌드에는 이 태스크가 없다.

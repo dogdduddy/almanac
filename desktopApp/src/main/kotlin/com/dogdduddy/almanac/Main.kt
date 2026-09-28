@@ -67,7 +67,7 @@ fun main() = application {
         // 다시 찾아야 하고 그러면 결과가 매번 달라진다. 평소에는 OS 가 정하게 둔다.
         state = if (demoTools) rememberWindowState(
             width = 440.dp, height = 860.dp,
-            position = WindowPosition(DEMO_WINDOW_X.dp, DEMO_WINDOW_Y.dp),
+            position = demoWindow.let { (x, y) -> WindowPosition(x.dp, y.dp) },
         ) else rememberWindowState(width = 440.dp, height = 860.dp),
     ) {
         App(
@@ -112,6 +112,18 @@ private val demoTools: Boolean get() = System.getProperty("almanac.demo") == "tr
 /** 촬영에서 창이 뜨는 자리 (논리 좌표). `screencapture -R` 이 같은 값을 쓴다. */
 const val DEMO_WINDOW_X = 60
 const val DEMO_WINDOW_Y = 40
+
+/**
+ * 실제로 쓰는 자리. `-Palmanac.demo.window=x,y` 로 바꾼다 (주 화면 왼쪽 위가 원점인 전역 좌표).
+ *
+ * **주 화면이 1배율 외부 모니터면 캡처가 440×860 으로 나온다.** 3배율인 폰 둘 사이에
+ * 놓이면 혼자 흐리다. 그래서 `scripts/record_kmp.py` 가 2배율 화면을 찾아 그 자리를 넘긴다.
+ */
+private val demoWindow: Pair<Int, Int>
+    get() = System.getProperty("almanac.demo.window")
+        ?.split(",")?.mapNotNull { it.trim().toIntOrNull() }
+        ?.takeIf { it.size == 2 }?.let { (x, y) -> x to y }
+        ?: (DEMO_WINDOW_X to DEMO_WINDOW_Y)
 
 /**
  * 촬영 고정 창구. 고정값은 **실행 옵션으로도** 받는다 (DemoLaunchOptions) —
