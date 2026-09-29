@@ -8,6 +8,10 @@ local.properties
 /almanac-privacy/
 /Key
 
+# Local demo exports and submission assets (published separately)
+/deliverables/
+/media/
+
 # Xcode
 xcuserdata/
 *.xcworkspace/xcuserdata/
